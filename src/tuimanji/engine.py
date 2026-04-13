@@ -1,0 +1,41 @@
+from typing import Any, Protocol, runtime_checkable
+
+from rich.segment import Segment  # noqa: F401  (used by Game impls)
+from textual.geometry import Size
+from textual.strip import Strip
+
+
+class GameError(Exception):
+    pass
+
+
+class IllegalAction(GameError):
+    pass
+
+
+class NotYourTurn(GameError):
+    def __init__(self, player: str, expected: str | None):
+        super().__init__(f"not {player}'s turn (expected {expected})")
+        self.player = player
+        self.expected = expected
+
+
+class MatchNotFound(GameError):
+    pass
+
+
+@runtime_checkable
+class Game(Protocol):
+    id: str
+    name: str
+    min_players: int
+    max_players: int
+
+    def initial_state(self, players: list[str]) -> dict[str, Any]: ...
+    def apply_action(
+        self, state: dict[str, Any], player: str, action: dict[str, Any]
+    ) -> dict[str, Any]: ...
+    def current_player(self, state: dict[str, Any]) -> str | None: ...
+    def winner(self, state: dict[str, Any]) -> str | None: ...
+    def is_terminal(self, state: dict[str, Any]) -> bool: ...
+    def render(self, state: dict[str, Any], viewport: Size) -> list[Strip]: ...
