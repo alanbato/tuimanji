@@ -44,3 +44,17 @@ class Game(Protocol):
         viewport: Size,
         ui: dict[str, Any] | None = None,
     ) -> list[Strip]: ...
+
+    # Cursor model — lets MatchScreen stay game-agnostic.
+    def initial_cursor(self) -> dict[str, Any]: ...
+    def move_cursor(
+        self, cursor: dict[str, Any], dr: int, dc: int
+    ) -> dict[str, Any]: ...
+    def cursor_action(self, cursor: dict[str, Any]) -> dict[str, Any]: ...
+
+    # Optional animation hook. Return None when no animation is needed.
+    def animation_for(
+        self,
+        prev_state: dict[str, Any],
+        new_state: dict[str, Any],
+    ) -> dict[str, Any] | None: ...

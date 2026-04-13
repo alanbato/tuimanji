@@ -90,6 +90,23 @@ class TicTacToe:
     def is_terminal(self, state: dict[str, Any]) -> bool:
         return state.get("winner") is not None or self._is_draw(state)
 
+    def initial_cursor(self) -> dict[str, Any]:
+        return {"row": 0, "col": 0}
+
+    def move_cursor(self, cursor: dict[str, Any], dr: int, dc: int) -> dict[str, Any]:
+        return {
+            "row": (cursor["row"] + dr) % 3,
+            "col": (cursor["col"] + dc) % 3,
+        }
+
+    def cursor_action(self, cursor: dict[str, Any]) -> dict[str, Any]:
+        return {"row": cursor["row"], "col": cursor["col"]}
+
+    def animation_for(
+        self, prev_state: dict[str, Any], new_state: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        return None
+
     def render(
         self,
         state: dict[str, Any],
@@ -99,7 +116,8 @@ class TicTacToe:
         board = state["board"]
         marks = state.get("marks", {})
         ui = ui or {}
-        cursor = tuple(ui["cursor"]) if ui.get("cursor") is not None else None
+        cur = ui.get("cursor")
+        cursor = (cur["row"], cur["col"]) if cur is not None else None
         active = ui.get("active", True)
 
         x_style = Style(color="bright_cyan", bold=True)

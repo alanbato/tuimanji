@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Footer, Static
 
 from .. import store
 from ..db import engine_for
@@ -56,7 +56,6 @@ class WaitingRoomScreen(Screen):
         return match is not None and match.created_by == self.me
 
     def compose(self) -> ComposeResult:
-        yield Header()
         with Vertical():
             self._title = Static(f"Waiting room — {self.game.name}", id="title")
             yield self._title
