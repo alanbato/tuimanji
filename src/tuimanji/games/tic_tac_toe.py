@@ -90,12 +90,23 @@ class TicTacToe:
     def is_terminal(self, state: dict[str, Any]) -> bool:
         return state.get("winner") is not None or self._is_draw(state)
 
-    def render(self, state: dict[str, Any], viewport: Size) -> list[Strip]:
+    def render(
+        self,
+        state: dict[str, Any],
+        viewport: Size,
+        ui: dict[str, Any] | None = None,
+    ) -> list[Strip]:
         board = state["board"]
         marks = state.get("marks", {})
+        ui = ui or {}
+        cursor = tuple(ui["cursor"]) if ui.get("cursor") is not None else None
+        active = ui.get("active", True)
+
         x_style = Style(color="bright_cyan", bold=True)
         o_style = Style(color="bright_magenta", bold=True)
         grid_style = Style(color="grey50")
+        cursor_active = Style(bgcolor="yellow", color="black", bold=True)
+        cursor_inactive = Style(bgcolor="grey30", color="white")
         styles = {"X": x_style, "O": o_style, EMPTY: Style(color="grey30")}
 
         def cell_strip(row_idx: int) -> Strip:
@@ -103,9 +114,16 @@ class TicTacToe:
             for c in range(3):
                 ch = board[row_idx][c]
                 glyph = ch if ch != EMPTY else "·"
-                segs.append(Segment(" "))
-                segs.append(Segment(glyph, styles[ch]))
-                segs.append(Segment(" "))
+                is_cursor = cursor == (row_idx, c)
+                if is_cursor:
+                    bg = cursor_active if active else cursor_inactive
+                    segs.append(Segment("[", bg))
+                    segs.append(Segment(glyph, bg))
+                    segs.append(Segment("]", bg))
+                else:
+                    segs.append(Segment(" "))
+                    segs.append(Segment(glyph, styles[ch]))
+                    segs.append(Segment(" "))
                 if c < 2:
                     segs.append(Segment("│", grid_style))
             return Strip(segs)

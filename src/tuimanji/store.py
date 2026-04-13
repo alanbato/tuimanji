@@ -13,7 +13,7 @@ def _now() -> int:
 
 
 def create_match(engine: Engine, game: Game, creator: str) -> str:
-    match_id = uuid.uuid4().hex[:12]
+    match_id = uuid.uuid4().hex[:6]
     with Session(engine) as s:
         s.add(
             Match(
@@ -53,21 +53,54 @@ def join_match(engine: Engine, game: Game, match_id: str, player: str) -> None:
         if next_seat >= game.max_players:
             raise ValueError("match is full")
         s.add(MatchPlayer(match_id=match_id, seat=next_seat, player_id=player))
-        seats_after = [mp.player_id for mp in seats] + [player]
-        if len(seats_after) >= game.min_players:
-            initial = game.initial_state(seats_after)
-            match.status = "active"
-            s.add(
-                MatchState(
-                    match_id=match_id,
-                    turn=0,
-                    state=initial,
-                    current=game.current_player(initial),
-                    winner=game.winner(initial),
-                    created_at=_now(),
-                )
-            )
         s.commit()
+
+
+class MatchNotReady(Exception):
+    pass
+
+
+def start_match(engine: Engine, game: Game, match_id: str, player: str) -> None:
+    """Transition a waiting match to active. Only the creator may start, and
+    only once min_players seats are filled."""
+    with Session(engine) as s:
+        match = s.get(Match, match_id)
+        if match is None:
+            raise MatchNotFound(match_id)
+        if match.status != "waiting":
+            raise ValueError(f"match {match_id} is not in waiting state")
+        if match.created_by != player:
+            raise ValueError("only the match creator can start the game")
+        seats = list(
+            s.scalars(
+                select(MatchPlayer)
+                .where(MatchPlayer.match_id == match_id)
+                .order_by(col(MatchPlayer.seat))
+            )
+        )
+        players = [mp.player_id for mp in seats]
+        if len(players) < game.min_players:
+            raise MatchNotReady(
+                f"need at least {game.min_players} players, have {len(players)}"
+            )
+        initial = game.initial_state(players)
+        match.status = "active"
+        s.add(
+            MatchState(
+                match_id=match_id,
+                turn=0,
+                state=initial,
+                current=game.current_player(initial),
+                winner=game.winner(initial),
+                created_at=_now(),
+            )
+        )
+        s.commit()
+
+
+def get_match(engine: Engine, match_id: str) -> Match | None:
+    with Session(engine) as s:
+        return s.get(Match, match_id)
 
 
 def latest_state(engine: Engine, match_id: str) -> MatchState | None:

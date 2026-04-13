@@ -29,7 +29,6 @@ class MatchScreen(Screen):
     CSS = """
     MatchScreen { align: center middle; }
     #status { height: 3; padding: 1 2; }
-    #cursor { height: 1; padding: 0 2; color: $accent; }
     #error { height: 1; padding: 0 2; color: $error; }
     GameCanvas { border: round $primary; width: 40; height: 15; }
     """
@@ -44,8 +43,8 @@ class MatchScreen(Screen):
         self.cursor_row = 0
         self.cursor_col = 0
         self._last_turn = -1
+        self._last_active: bool | None = None
         self._status: Static | None = None
-        self._cursor_label: Static | None = None
         self._error_label: Static | None = None
 
     @property
@@ -63,15 +62,12 @@ class MatchScreen(Screen):
             yield self._status
             with Horizontal():
                 latest = store.latest_state(self.engine, self.match_id)
-                initial_state = (
-                    latest.state
-                    if latest
-                    else self.game.initial_state([self.me, self.me])
-                )
-                self.canvas = GameCanvas(self.game, initial_state)
+                if latest is None:
+                    raise RuntimeError(
+                        f"MatchScreen opened for un-started match {self.match_id}"
+                    )
+                self.canvas = GameCanvas(self.game, latest.state)
                 yield self.canvas
-            self._cursor_label = Static(self._cursor_text(), id="cursor")
-            yield self._cursor_label
             self._error_label = Static("", id="error")
             yield self._error_label
         yield Footer()
@@ -80,24 +76,30 @@ class MatchScreen(Screen):
         self._refresh()
         self.set_interval(0.5, self._refresh)
 
-    def _cursor_text(self) -> str:
-        return f"cursor: ({self.cursor_row},{self.cursor_col})"
+    def _push_cursor(self) -> None:
+        if self.canvas is not None:
+            self.canvas.set_ui(cursor=(self.cursor_row, self.cursor_col))
 
     def _refresh(self) -> None:
         latest = store.latest_state(self.engine, self.match_id)
         if latest is None:
-            if self._status:
-                self._status.update("waiting for opponent to join…")
             return
         if latest.turn != self._last_turn:
             self._last_turn = latest.turn
             if self.canvas is not None:
                 self.canvas.set_state(latest.state)
+        my_turn = latest.current == self.me and not self.game.is_terminal(latest.state)
+        if my_turn != self._last_active:
+            self._last_active = my_turn
+            if self.canvas is not None:
+                self.canvas.set_ui(
+                    cursor=(self.cursor_row, self.cursor_col), active=my_turn
+                )
         if latest.winner is not None:
             msg = f"  winner: {latest.winner} — press Esc to return to lobby"
         elif self.game.is_terminal(latest.state):
             msg = "  draw — press Esc to return to lobby"
-        elif latest.current == self.me:
+        elif my_turn:
             msg = f"  your turn ({self.game.name})"
         else:
             msg = f"  waiting for {latest.current}…"
@@ -107,8 +109,7 @@ class MatchScreen(Screen):
     def action_move(self, dr: int, dc: int) -> None:
         self.cursor_row = (self.cursor_row + dr) % 3
         self.cursor_col = (self.cursor_col + dc) % 3
-        if self._cursor_label:
-            self._cursor_label.update(self._cursor_text())
+        self._push_cursor()
 
     def action_place(self) -> None:
         try:

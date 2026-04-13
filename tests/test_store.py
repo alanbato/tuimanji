@@ -4,6 +4,7 @@ from tuimanji import store
 from tuimanji.db import engine_for
 from tuimanji.engine import NotYourTurn
 from tuimanji.games.tic_tac_toe import TicTacToe
+from tuimanji.store import MatchNotReady
 
 
 @pytest.fixture
@@ -17,26 +18,49 @@ def game() -> TicTacToe:
     return TicTacToe()
 
 
+def _seat_and_start(engine, game, creator="alice", opponent="bob"):
+    match_id = store.create_match(engine, game, creator)
+    store.join_match(engine, game, match_id, opponent)
+    store.start_match(engine, game, match_id, creator)
+    return match_id
+
+
 def test_wal_mode_enabled(engine):
     with engine.connect() as conn:
         mode = conn.exec_driver_sql("PRAGMA journal_mode").scalar()
     assert mode.lower() == "wal"
 
 
-def test_create_and_join_starts_match(engine, game):
+def test_join_does_not_auto_start(engine, game):
     match_id = store.create_match(engine, game, "alice")
-    assert store.latest_state(engine, match_id) is None
     store.join_match(engine, game, match_id, "bob")
-    state_row = store.latest_state(engine, match_id)
-    assert state_row is not None
-    assert state_row.turn == 0
-    assert state_row.current == "alice"
+    assert store.latest_state(engine, match_id) is None
+    m = store.get_match(engine, match_id)
+    assert m is not None and m.status == "waiting"
     assert store.match_players(engine, match_id) == ["alice", "bob"]
 
 
-def test_submit_action_turn_progression(engine, game):
+def test_start_match_requires_creator(engine, game):
     match_id = store.create_match(engine, game, "alice")
     store.join_match(engine, game, match_id, "bob")
+    with pytest.raises(ValueError, match="creator"):
+        store.start_match(engine, game, match_id, "bob")
+    store.start_match(engine, game, match_id, "alice")
+    state_row = store.latest_state(engine, match_id)
+    assert state_row is not None and state_row.turn == 0
+    assert state_row.current == "alice"
+    m = store.get_match(engine, match_id)
+    assert m is not None and m.status == "active"
+
+
+def test_start_match_needs_min_players(engine, game):
+    match_id = store.create_match(engine, game, "alice")
+    with pytest.raises(MatchNotReady):
+        store.start_match(engine, game, match_id, "alice")
+
+
+def test_submit_action_turn_progression(engine, game):
+    match_id = _seat_and_start(engine, game)
     after = store.submit_action(engine, match_id, "alice", {"row": 0, "col": 0}, game)
     assert after.turn == 1
     assert after.current == "bob"
@@ -44,15 +68,13 @@ def test_submit_action_turn_progression(engine, game):
 
 
 def test_wrong_turn_rejected(engine, game):
-    match_id = store.create_match(engine, game, "alice")
-    store.join_match(engine, game, match_id, "bob")
+    match_id = _seat_and_start(engine, game)
     with pytest.raises(NotYourTurn):
         store.submit_action(engine, match_id, "bob", {"row": 0, "col": 0}, game)
 
 
 def test_terminal_flips_match_status(engine, game):
-    match_id = store.create_match(engine, game, "alice")
-    store.join_match(engine, game, match_id, "bob")
+    match_id = _seat_and_start(engine, game)
     moves = [
         ("alice", 0, 0),
         ("bob", 1, 0),
@@ -76,6 +98,7 @@ def test_race_same_turn_one_wins(tmp_path, monkeypatch, game):
     e2 = engine_for("tic-tac-toe")
     match_id = store.create_match(e1, game, "alice")
     store.join_match(e1, game, match_id, "bob")
+    store.start_match(e1, game, match_id, "alice")
     # Alice plays through e1; bob (wrong turn) tries through e2 on same turn.
     store.submit_action(e1, match_id, "alice", {"row": 0, "col": 0}, game)
     with pytest.raises(NotYourTurn):
