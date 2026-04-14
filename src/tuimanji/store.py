@@ -1,6 +1,7 @@
 import time
 import uuid
 
+from sqlalchemy import case
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, col, select
 
@@ -120,6 +121,23 @@ def list_matches(engine: Engine, status: str | None = None) -> list[Match]:
         if status is not None:
             stmt = stmt.where(Match.status == status)
         return list(s.scalars(stmt))
+
+
+def best_resumable(engine: Engine, player_id: str) -> Match | None:
+    """Return the single match `player_id` should resume in this engine, or
+    None. Active before waiting, newest first within each bucket.
+    """
+    with Session(engine) as s:
+        priority = case((col(Match.status) == "active", 0), else_=1)
+        stmt = (
+            select(Match)
+            .join(MatchPlayer, col(MatchPlayer.match_id) == col(Match.id))
+            .where(col(MatchPlayer.player_id) == player_id)
+            .where(col(Match.status) != "finished")
+            .order_by(priority, col(Match.created_at).desc())
+            .limit(1)
+        )
+        return s.scalars(stmt).first()
 
 
 def match_players(engine: Engine, match_id: str) -> list[str]:

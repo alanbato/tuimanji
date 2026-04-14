@@ -43,6 +43,27 @@ def _parse_slot(user: str, player_id: str) -> int | None:
         return None
 
 
+def find_resume_target(player_id: str) -> tuple[str, str, str] | None:
+    """Return `(game_id, match_id, status)` for the match `player_id` should
+    resume, or None if there isn't one. Prefers active matches over waiting
+    ones, newest first within each bucket.
+    """
+    candidates = (
+        (game.id, m)
+        for game in all_games()
+        if (m := store.best_resumable(engine_for(game.id), player_id)) is not None
+    )
+    best = min(
+        candidates,
+        key=lambda gm: (gm[1].status != "active", -gm[1].created_at),
+        default=None,
+    )
+    if best is None:
+        return None
+    game_id, m = best
+    return game_id, m.id, m.status
+
+
 def _resumable_slots(user: str) -> list[int]:
     slots: set[int] = set()
     for game in all_games():
