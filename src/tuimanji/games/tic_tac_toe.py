@@ -1,14 +1,23 @@
 from typing import Any
 
 from rich.segment import Segment
-from rich.style import Style
 from textual.geometry import Size
 from textual.strip import Strip
 
 from ..engine import IllegalAction
-from ..ui.theme import bg_style, style
+from ..ui.theme import style
+from ._common import (
+    EMPTY,
+    copy_grid,
+    cursor_bracket,
+    cursor_palette,
+    empty_grid,
+    header_palette,
+    opponent_of,
+    order_header,
+    status_strip,
+)
 
-EMPTY = "."
 LINES = [
     [(0, 0), (0, 1), (0, 2)],
     [(1, 0), (1, 1), (1, 2)],
@@ -31,7 +40,7 @@ class TicTacToe:
         if len(players) != 2:
             raise ValueError("tic-tac-toe requires exactly 2 players")
         return {
-            "board": [[EMPTY] * 3 for _ in range(3)],
+            "board": empty_grid(3, 3),
             "marks": {players[0]: "X", players[1]: "O"},
             "order": list(players),
             "turn_player": players[0],
@@ -51,12 +60,11 @@ class TicTacToe:
             raise IllegalAction(f"bad action: {action}") from e
         if not (0 <= r < 3 and 0 <= c < 3):
             raise IllegalAction(f"out of bounds: ({r},{c})")
-        board = [row[:] for row in state["board"]]
+        board = copy_grid(state["board"])
         if board[r][c] != EMPTY:
             raise IllegalAction(f"cell ({r},{c}) is taken")
         board[r][c] = state["marks"][player]
-        order = state["order"]
-        next_player = order[(order.index(player) + 1) % 2]
+        next_player = opponent_of(state["order"], player)
         new_state = {
             **state,
             "board": board,
@@ -115,60 +123,54 @@ class TicTacToe:
         ui: dict[str, Any] | None = None,
     ) -> list[Strip]:
         board = state["board"]
-        marks = state.get("marks", {})
         ui = ui or {}
         cur = ui.get("cursor")
         cursor = (cur["row"], cur["col"]) if cur is not None else None
         active = ui.get("active", True)
         theme = ui.get("theme")
 
-        x_style = style(theme, "primary", bold=True)
-        o_style = style(theme, "accent", bold=True)
         grid_style = style(theme, "muted")
-        cursor_active = bg_style(theme, "warning", color="black", bold=True)
-        cursor_inactive = bg_style(theme, "muted", color="white")
-        styles = {"X": x_style, "O": o_style, EMPTY: style(theme, "muted")}
+        cursor_active, cursor_inactive = cursor_palette(theme)
+        glyph_styles = {
+            "X": style(theme, "primary", bold=True),
+            "O": style(theme, "accent", bold=True),
+            EMPTY: style(theme, "muted"),
+        }
 
         def cell_strip(row_idx: int) -> Strip:
             segs: list[Segment] = []
             for c in range(3):
                 ch = board[row_idx][c]
                 glyph = ch if ch != EMPTY else "·"
-                is_cursor = cursor == (row_idx, c)
-                if is_cursor:
-                    bg = cursor_active if active else cursor_inactive
-                    segs.append(Segment("[", bg))
-                    segs.append(Segment(glyph, bg))
-                    segs.append(Segment("]", bg))
+                if cursor == (row_idx, c):
+                    segs.extend(
+                        cursor_bracket(
+                            glyph, cursor_active if active else cursor_inactive
+                        )
+                    )
                 else:
                     segs.append(Segment(" "))
-                    segs.append(Segment(glyph, styles[ch]))
+                    segs.append(Segment(glyph, glyph_styles[ch]))
                     segs.append(Segment(" "))
                 if c < 2:
                     segs.append(Segment("│", grid_style))
             return Strip(segs)
 
         sep = Strip([Segment("───┼───┼───", grid_style)])
-        header_text = "  "
-        for p in state.get("order", []):
-            header_text += f"{p}({marks.get(p, '?')})  "
-        header = Strip([Segment(header_text, Style(dim=True))])
         blank = Strip([Segment("")])
 
-        lines: list[Strip] = [header, blank]
+        lines: list[Strip] = [order_header(state, header_palette(theme)), blank]
         for r in range(3):
             lines.append(cell_strip(r))
             if r < 2:
                 lines.append(sep)
 
-        turn = state.get("turn_player")
-        w = state.get("winner")
-        if w is not None:
-            status = f"  winner: {w}"
+        if state.get("winner") is not None:
+            status = f"  winner: {state['winner']}"
         elif self._is_draw(state):
             status = "  draw"
         else:
-            status = f"  turn: {turn}"
+            status = f"  turn: {state.get('turn_player')}"
         lines.append(blank)
-        lines.append(Strip([Segment(status, Style(italic=True))]))
+        lines.append(status_strip(status))
         return lines

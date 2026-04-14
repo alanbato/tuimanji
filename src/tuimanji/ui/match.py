@@ -57,10 +57,10 @@ class MatchScreen(Screen):
         self._last_active: bool | None = None
         self._displayed_state: dict[str, Any] | None = None
         self._animation_timer: "Timer | None" = None
-        self._anim_kind: str | None = None
-        self._anim_frame: int = 0
+        self._anim: dict[str, Any] | None = None
         self._pending_state: dict[str, Any] | None = None
         self._error_label: Static | None = None
+        self._palette: dict[str, str] | None = None
 
     @property
     def _app(self) -> "TuimanjiApp":
@@ -97,6 +97,7 @@ class MatchScreen(Screen):
         self.watch(self.app, "theme", self._on_theme_changed, init=False)
 
     def _on_theme_changed(self, _theme_name: str) -> None:
+        self._palette = palette_from_app(self.app)
         self._push_cursor_ui()
 
     def _push_cursor_ui(self, active: bool | None = None) -> None:
@@ -104,11 +105,13 @@ class MatchScreen(Screen):
             return
         if active is None:
             active = self._last_active if self._last_active is not None else True
+        if self._palette is None:
+            self._palette = palette_from_app(self.app)
         self.canvas.set_ui(
             cursor=self._cursor,
             active=active,
             player=self.me,
-            theme=palette_from_app(self.app),
+            theme=self._palette,
         )
 
     def _refresh(self) -> None:
@@ -157,81 +160,84 @@ class MatchScreen(Screen):
     def _start_animation(self, anim: dict[str, Any]) -> None:
         kind = anim.get("type")
         if kind == "fall":
-            self._anim_kind = "fall"
-            self._anim_col = int(anim["col"])
-            self._anim_target = int(anim["target_row"])
-            self._anim_mark = anim["mark"]
-            self._anim_row = 0
-            self._push_falling_ui()
-            self._animation_timer = self.set_interval(
-                FALL_FRAME_SECONDS, self._tick_animation
-            )
-            return
-        if kind == "explode":
-            self._anim_kind = "explode"
-            self._anim_row = int(anim["row"])
-            self._anim_col = int(anim["col"])
-            self._anim_frame = 0
-            self._push_explosion_ui()
-            self._animation_timer = self.set_interval(
-                EXPLODE_FRAME_SECONDS, self._tick_animation
-            )
-            return
-        # Unknown animation — fall through.
-        if self._pending_state is not None:
-            self._set_displayed(self._pending_state)
-            self._pending_state = None
-
-    def _push_falling_ui(self) -> None:
-        if self.canvas is None:
-            return
-        self.canvas.set_ui(
-            falling={
-                "col": self._anim_col,
-                "row": self._anim_row,
-                "mark": self._anim_mark,
+            self._anim = {
+                "type": "fall",
+                "col": int(anim["col"]),
+                "target_row": int(anim["target_row"]),
+                "mark": anim["mark"],
+                "row": 0,
             }
-        )
-
-    def _push_explosion_ui(self) -> None:
-        if self.canvas is None:
-            return
-        self.canvas.set_ui(
-            explosion={
-                "row": self._anim_row,
-                "col": self._anim_col,
-                "frame": self._anim_frame,
+            interval = FALL_FRAME_SECONDS
+        elif kind == "explode":
+            self._anim = {
+                "type": "explode",
+                "row": int(anim["row"]),
+                "col": int(anim["col"]),
+                "frame": 0,
             }
-        )
+            interval = EXPLODE_FRAME_SECONDS
+        else:
+            # Unknown animation — fall through.
+            if self._pending_state is not None:
+                self._set_displayed(self._pending_state)
+                self._pending_state = None
+            return
+        self._push_anim_ui()
+        self._animation_timer = self.set_interval(interval, self._tick_animation)
+
+    def _push_anim_ui(self) -> None:
+        if self.canvas is None or self._anim is None:
+            return
+        if self._anim["type"] == "fall":
+            self.canvas.set_ui(
+                falling={
+                    "col": self._anim["col"],
+                    "row": self._anim["row"],
+                    "mark": self._anim["mark"],
+                }
+            )
+        else:
+            self.canvas.set_ui(
+                explosion={
+                    "row": self._anim["row"],
+                    "col": self._anim["col"],
+                    "frame": self._anim["frame"],
+                }
+            )
 
     def _tick_animation(self) -> None:
-        if self._anim_kind == "fall":
-            self._anim_row += 1
-            if self._anim_row > self._anim_target:
+        if self._anim is None:
+            return
+        if self._anim["type"] == "fall":
+            self._anim["row"] += 1
+            if self._anim["row"] > self._anim["target_row"]:
                 self._finish_animation()
                 return
-            self._push_falling_ui()
-            return
-        if self._anim_kind == "explode":
-            self._anim_frame += 1
-            if self._anim_frame >= EXPLODE_FRAMES:
+        else:
+            self._anim["frame"] += 1
+            if self._anim["frame"] >= EXPLODE_FRAMES:
                 self._finish_animation()
                 return
-            self._push_explosion_ui()
-            return
+        self._push_anim_ui()
 
     def _finish_animation(self) -> None:
         if self._animation_timer is not None:
             self._animation_timer.stop()
             self._animation_timer = None
+        self._anim = None
         if self.canvas is not None:
             self.canvas.set_ui(falling=None, explosion=None)
         if self._pending_state is not None:
             self._set_displayed(self._pending_state)
             self._maybe_sync_cursor(self._pending_state)
             self._pending_state = None
-        # Refresh status / active flag now that the animation is done.
         self._refresh()
+
+    def on_unmount(self) -> None:
+        if self._animation_timer is not None:
+            self._animation_timer.stop()
+            self._animation_timer = None
+        self._anim = None
 
     def action_move(self, dr: int, dc: int) -> None:
         if self._animating:

@@ -1,16 +1,27 @@
 from typing import Any
 
 from rich.segment import Segment
-from rich.style import Style
 from textual.geometry import Size
 from textual.strip import Strip
 
 from ..engine import IllegalAction
 from ..ui.theme import style
+from ._common import (
+    EMPTY,
+    col_labels,
+    copy_grid,
+    empty_grid,
+    grid_bot,
+    grid_sep,
+    grid_top,
+    header_palette,
+    opponent_of,
+    order_header,
+    status_strip,
+)
 
 ROWS = 6
 COLS = 7
-EMPTY = "."
 DIRS = [(0, 1), (1, 0), (1, 1), (1, -1)]
 
 
@@ -24,7 +35,7 @@ class Connect4:
         if len(players) != 2:
             raise ValueError("connect-4 requires exactly 2 players")
         return {
-            "board": [[EMPTY] * COLS for _ in range(ROWS)],
+            "board": empty_grid(ROWS, COLS),
             "marks": {players[0]: "R", players[1]: "Y"},
             "order": list(players),
             "turn_player": players[0],
@@ -45,14 +56,13 @@ class Connect4:
             raise IllegalAction(f"bad action: {action}") from e
         if not (0 <= col < COLS):
             raise IllegalAction(f"column out of bounds: {col}")
-        board = [row[:] for row in state["board"]]
+        board = copy_grid(state["board"])
         target_row = self._lowest_empty(board, col)
         if target_row is None:
             raise IllegalAction(f"column {col} is full")
         mark = state["marks"][player]
         board[target_row][col] = mark
-        order = state["order"]
-        next_player = order[(order.index(player) + 1) % 2]
+        next_player = opponent_of(state["order"], player)
         return {
             **state,
             "board": board,
@@ -140,16 +150,16 @@ class Connect4:
         theme = ui.get("theme")
 
         board = state["board"]
-        marks = state.get("marks", {})
 
-        red_style = style(theme, "error", bold=True)
-        yellow_style = style(theme, "warning", bold=True)
         empty_style = style(theme, "muted")
         grid_style = style(theme, "primary")
         cursor_active = style(theme, "success", bold=True)
         cursor_inactive = style(theme, "muted")
-        header_style = style(theme, "muted", dim=True)
-        chip_style = {"R": red_style, "Y": yellow_style}
+        header_style = header_palette(theme)
+        chip_style = {
+            "R": style(theme, "error", bold=True),
+            "Y": style(theme, "warning", bold=True),
+        }
 
         def chip_segment(ch: str) -> Segment:
             if ch == EMPTY:
@@ -176,10 +186,7 @@ class Connect4:
                 segs.append(Segment("│", grid_style))
             return Strip(segs)
 
-        header_text = "  "
-        for p in state.get("order", []):
-            header_text += f"{p}({marks.get(p, '?')})  "
-        header = Strip([Segment(header_text, header_style)])
+        header = order_header(state, header_style)
 
         # Cursor row above the board — an arrow over the selected column.
         cursor_row_segs: list[Segment] = [Segment(" ")]
@@ -193,34 +200,20 @@ class Connect4:
             cursor_row_segs.append(Segment(" "))
         cursor_line = Strip(cursor_row_segs)
 
-        top = Strip([Segment("┌" + "───┬" * (COLS - 1) + "───┐", grid_style)])
-        sep = Strip([Segment("├" + "───┼" * (COLS - 1) + "───┤", grid_style)])
-        bot = Strip([Segment("└" + "───┴" * (COLS - 1) + "───┘", grid_style)])
-
-        lines: list[Strip] = [header, cursor_line, top]
+        lines: list[Strip] = [header, cursor_line, grid_top(COLS, grid_style)]
         for r in range(ROWS):
             lines.append(draw_row(r))
             if r < ROWS - 1:
-                lines.append(sep)
-        lines.append(bot)
+                lines.append(grid_sep(COLS, grid_style))
+        lines.append(grid_bot(COLS, grid_style))
+        lines.append(col_labels(COLS, header_style, start=1))
 
-        # Column labels
-        label_segs: list[Segment] = [Segment(" ")]
-        for c in range(COLS):
-            label_segs.append(Segment(" "))
-            label_segs.append(Segment(str(c + 1), header_style))
-            label_segs.append(Segment(" "))
-            label_segs.append(Segment(" "))
-        lines.append(Strip(label_segs))
-
-        turn = state.get("turn_player")
-        w = state.get("winner")
-        if w is not None:
-            status = f"  winner: {w}"
+        if state.get("winner") is not None:
+            status = f"  winner: {state['winner']}"
         elif self._is_draw(state):
             status = "  draw"
         else:
-            status = f"  turn: {turn}"
+            status = f"  turn: {state.get('turn_player')}"
         lines.append(Strip([Segment("")]))
-        lines.append(Strip([Segment(status, Style(italic=True))]))
+        lines.append(status_strip(status))
         return lines

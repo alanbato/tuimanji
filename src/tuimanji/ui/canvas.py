@@ -31,8 +31,13 @@ class GameCanvas(Widget, can_focus=True):
         self._rebuild()
 
     def set_ui(self, **ui: Any) -> None:
-        self._ui.update(ui)
-        self._rebuild()
+        changed = False
+        for key, value in ui.items():
+            if self._ui.get(key) != value:
+                self._ui[key] = value
+                changed = True
+        if changed:
+            self._rebuild()
 
     def on_mount(self) -> None:
         self._rebuild()

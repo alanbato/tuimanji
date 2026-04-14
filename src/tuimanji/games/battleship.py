@@ -6,10 +6,25 @@ from textual.geometry import Size
 from textual.strip import Strip
 
 from ..engine import IllegalAction
-from ..ui.theme import bg_style, style
+from ..ui.theme import style
+from ._common import (
+    EMPTY,
+    cell_segments,
+    col_labels,
+    copy_grid,
+    cursor_bracket,
+    cursor_palette,
+    empty_grid,
+    grid_bot,
+    grid_sep,
+    grid_top,
+    header_palette,
+    in_bounds,
+    opponent_of,
+    wrap_cursor,
+)
 
 SIZE = 10
-EMPTY = "."
 HIT = "H"
 MISS = "M"
 
@@ -26,10 +41,6 @@ FLEET_LEN = {name: length for name, length, _ in FLEET}
 FLEET_MARK = {name: mark for name, _, mark in FLEET}
 
 
-def _empty_grid() -> list[list[str]]:
-    return [[EMPTY] * SIZE for _ in range(SIZE)]
-
-
 def _ship_cells(row: int, col: int, length: int, direction: str) -> list[list[int]]:
     if direction == "h":
         return [[row, col + i] for i in range(length)]
@@ -38,8 +49,8 @@ def _ship_cells(row: int, col: int, length: int, direction: str) -> list[list[in
     raise IllegalAction(f"bad direction: {direction}")
 
 
-def _in_bounds(cells: list[list[int]]) -> bool:
-    return all(0 <= r < SIZE and 0 <= c < SIZE for r, c in cells)
+def _cells_in_bounds(cells: list[list[int]]) -> bool:
+    return all(in_bounds(r, c, SIZE, SIZE) for r, c in cells)
 
 
 class Battleship:
@@ -58,8 +69,8 @@ class Battleship:
             "phase": "placement",
             "order": [p1, p2],
             "turn_player": p1,  # whoever submits first; both write once during placement
-            "boards": {p1: _empty_grid(), p2: _empty_grid()},
-            "shots": {p1: _empty_grid(), p2: _empty_grid()},
+            "boards": {p1: empty_grid(SIZE, SIZE), p2: empty_grid(SIZE, SIZE)},
+            "shots": {p1: empty_grid(SIZE, SIZE), p2: empty_grid(SIZE, SIZE)},
             "fleets": {p1: [], p2: []},
             "placed": {p1: False, p2: False},
             "last_shot": None,
@@ -95,7 +106,7 @@ class Battleship:
         if not isinstance(ships_in, list) or len(ships_in) != len(FLEET):
             raise IllegalAction(f"need exactly {len(FLEET)} ships")
         names_seen: set[str] = set()
-        board = _empty_grid()
+        board = empty_grid(SIZE, SIZE)
         fleet: list[dict[str, Any]] = []
         for entry in ships_in:
             try:
@@ -112,7 +123,7 @@ class Battleship:
             names_seen.add(name)
             length = FLEET_LEN[name]
             cells = _ship_cells(row, col, length, direction)
-            if not _in_bounds(cells):
+            if not _cells_in_bounds(cells):
                 raise IllegalAction(f"{name} out of bounds")
             for r, c in cells:
                 if board[r][c] != EMPTY:
@@ -133,11 +144,10 @@ class Battleship:
         new_boards = {**state["boards"], player: board}
         new_fleets = {**state["fleets"], player: fleet}
         new_placed = {**state["placed"], player: True}
-        order = state["order"]
-        opponent = order[(order.index(player) + 1) % 2]
+        opponent = opponent_of(state["order"], player)
         if new_placed[opponent]:
             phase = "battle"
-            turn_player = order[0]
+            turn_player = state["order"][0]
         else:
             phase = "placement"
             turn_player = opponent
@@ -163,15 +173,14 @@ class Battleship:
             raise IllegalAction(f"bad fire action: {action}") from e
         if not (0 <= row < SIZE and 0 <= col < SIZE):
             raise IllegalAction(f"out of bounds: ({row},{col})")
-        order = state["order"]
-        opponent = order[(order.index(player) + 1) % 2]
+        opponent = opponent_of(state["order"], player)
         opp_shots_old = state["shots"][opponent]
         if opp_shots_old[row][col] != EMPTY:
             raise IllegalAction(f"already shot at ({row},{col})")
         opp_board = state["boards"][opponent]
         is_hit = opp_board[row][col] != EMPTY
 
-        new_opp_shots = [r[:] for r in opp_shots_old]
+        new_opp_shots = copy_grid(opp_shots_old)
         new_opp_shots[row][col] = HIT if is_hit else MISS
         new_shots = {**state["shots"], opponent: new_opp_shots}
 
@@ -233,11 +242,7 @@ class Battleship:
         }
 
     def move_cursor(self, cursor: dict[str, Any], dr: int, dc: int) -> dict[str, Any]:
-        return {
-            **cursor,
-            "row": (cursor["row"] + dr) % SIZE,
-            "col": (cursor["col"] + dc) % SIZE,
-        }
+        return wrap_cursor(cursor, dr, dc, SIZE, SIZE)
 
     def cursor_action(self, cursor: dict[str, Any]) -> dict[str, Any]:
         if cursor["mode"] == "placement":
@@ -258,7 +263,7 @@ class Battleship:
         idx = cursor["ship_idx"]
         name, length, _ = FLEET[idx]
         cells = _ship_cells(cursor["row"], cursor["col"], length, cursor["dir"])
-        if not _in_bounds(cells):
+        if not _cells_in_bounds(cells):
             raise IllegalAction(f"{name} out of bounds")
         occupied: set[tuple[int, int]] = set()
         for prior in cursor["placed"]:
@@ -303,7 +308,6 @@ class Battleship:
             "type": "explode",
             "row": int(shot["row"]),
             "col": int(shot["col"]),
-            "target": shot["player"],  # the shooter; the *other* player got hit
         }
 
     # ---------- render ----------
@@ -318,55 +322,29 @@ class Battleship:
         cursor = ui.get("cursor") or {}
         active = ui.get("active", True)
         me = ui.get("player")
-        explosion = ui.get("explosion")  # {row, col, frame, victim}
+        explosion = ui.get("explosion")
         theme = ui.get("theme")
 
         order = state.get("order", [])
         if me not in order:
             # Spectator / fallback: just show p1's view.
             me = order[0] if order else None
-        opponent = None
-        if me is not None and me in order:
-            opponent = order[(order.index(me) + 1) % 2]
+        opponent = opponent_of(order, me) if me in order else None
 
         phase = state.get("phase", "placement")
 
-        # Styles — drawn from the active Textual theme palette, with built-in
-        # fallbacks so the game stays renderable in tests and headless contexts.
         water_style = style(theme, "muted")
         ship_style = style(theme, "primary", bold=True)
         hit_style = style(theme, "error", bold=True)
         miss_style = style(theme, "muted")
         grid_style = style(theme, "primary")
-        cursor_active = bg_style(theme, "warning", color="black", bold=True)
-        cursor_inactive = bg_style(theme, "muted", color="white")
+        cursor_active, cursor_inactive = cursor_palette(theme)
         preview_style = style(theme, "success", bold=True)
         staged_style = style(theme, "accent")
-        header_style = style(theme, "muted", dim=True)
+        header_style = header_palette(theme)
         sunk_style = style(theme, "error", bold=True, strike=True)
 
         explosion_frames = ["O", "o", "✸", "X"]
-
-        def cell_segment(glyph: str, cell_style: Style) -> list[Segment]:
-            return [Segment(" "), Segment(glyph, cell_style), Segment(" ")]
-
-        def grid_top() -> Strip:
-            return Strip([Segment("┌" + ("───┬" * (SIZE - 1)) + "───┐", grid_style)])
-
-        def grid_bot() -> Strip:
-            return Strip([Segment("└" + ("───┴" * (SIZE - 1)) + "───┘", grid_style)])
-
-        def grid_sep() -> Strip:
-            return Strip([Segment("├" + ("───┼" * (SIZE - 1)) + "───┤", grid_style)])
-
-        def col_labels() -> Strip:
-            segs: list[Segment] = [Segment(" ")]
-            for c in range(SIZE):
-                segs.append(Segment(" "))
-                segs.append(Segment(f"{c}", header_style))
-                segs.append(Segment(" "))
-                segs.append(Segment(" "))
-            return Strip(segs)
 
         # Pre-compute the in-progress ship preview cells (placement only).
         preview_cells: set[tuple[int, int]] = set()
@@ -379,7 +357,7 @@ class Battleship:
             _, length, _ = FLEET[idx]
             try:
                 cells = _ship_cells(cursor["row"], cursor["col"], length, cursor["dir"])
-                if _in_bounds(cells):
+                if _cells_in_bounds(cells):
                     preview_cells = {(r, c) for r, c in cells}
             except IllegalAction:
                 pass
@@ -397,7 +375,7 @@ class Battleship:
         def render_target_row(r: int) -> Strip:
             """Top grid: shots I have fired at the opponent."""
             segs: list[Segment] = [Segment("│", grid_style)]
-            shots = state["shots"][opponent] if opponent else _empty_grid()
+            shots = state["shots"][opponent] if opponent else empty_grid(SIZE, SIZE)
             for c in range(SIZE):
                 cell = shots[r][c]
                 is_cursor = (
@@ -409,23 +387,21 @@ class Battleship:
                 if is_cursor:
                     bg = cursor_active if active else cursor_inactive
                     glyph = "X" if cell == HIT else "~" if cell == MISS else "·"
-                    segs.extend(
-                        [Segment("[", bg), Segment(glyph, bg), Segment("]", bg)]
-                    )
+                    segs.extend(cursor_bracket(glyph, bg))
                 elif cell == HIT:
-                    segs.extend(cell_segment("X", hit_style))
+                    segs.extend(cell_segments("X", hit_style))
                 elif cell == MISS:
-                    segs.extend(cell_segment("~", miss_style))
+                    segs.extend(cell_segments("~", miss_style))
                 else:
-                    segs.extend(cell_segment("·", water_style))
+                    segs.extend(cell_segments("·", water_style))
                 segs.append(Segment("│", grid_style))
             return Strip(segs)
 
         def render_fleet_row(r: int) -> Strip:
             """Bottom grid: my own board with incoming shots / explosion."""
             segs: list[Segment] = [Segment("│", grid_style)]
-            board = state["boards"][me] if me else _empty_grid()
-            shots_at_me = state["shots"][me] if me else _empty_grid()
+            board = state["boards"][me] if me else empty_grid(SIZE, SIZE)
+            shots_at_me = state["shots"][me] if me else empty_grid(SIZE, SIZE)
             for c in range(SIZE):
                 ship = board[r][c]
                 shot = shots_at_me[r][c]
@@ -446,39 +422,36 @@ class Battleship:
                 if is_explosion and isinstance(explosion, dict):
                     frame = int(explosion.get("frame", 0))
                     frame = max(0, min(frame, len(explosion_frames) - 1))
-                    segs.extend(cell_segment(explosion_frames[frame], hit_style))
-                elif phase == "placement" and is_cursor and in_preview:
-                    bg = cursor_active if active else cursor_inactive
-                    segs.extend([Segment("[", bg), Segment("#", bg), Segment("]", bg)])
+                    segs.extend(cell_segments(explosion_frames[frame], hit_style))
                 elif phase == "placement" and is_cursor:
                     bg = cursor_active if active else cursor_inactive
-                    segs.extend([Segment("[", bg), Segment("·", bg), Segment("]", bg)])
+                    segs.extend(cursor_bracket("#" if in_preview else "·", bg))
                 elif in_preview:
-                    segs.extend(cell_segment("#", preview_style))
+                    segs.extend(cell_segments("#", preview_style))
                 elif in_staged:
-                    segs.extend(cell_segment("■", staged_style))
+                    segs.extend(cell_segments("■", staged_style))
                 elif shot == HIT:
-                    segs.extend(cell_segment("X", hit_style))
+                    segs.extend(cell_segments("X", hit_style))
                 elif shot == MISS:
-                    segs.extend(cell_segment("~", miss_style))
+                    segs.extend(cell_segments("~", miss_style))
                 elif ship != EMPTY:
-                    segs.extend(cell_segment("■", ship_style))
+                    segs.extend(cell_segments("■", ship_style))
                 else:
-                    segs.extend(cell_segment("·", water_style))
+                    segs.extend(cell_segments("·", water_style))
                 segs.append(Segment("│", grid_style))
             return Strip(segs)
 
         def grid_block(label: str, row_renderer) -> list[Strip]:
             lines: list[Strip] = [
                 Strip([Segment(label, header_style)]),
-                col_labels(),
-                grid_top(),
+                col_labels(SIZE, header_style),
+                grid_top(SIZE, grid_style),
             ]
             for r in range(SIZE):
                 lines.append(row_renderer(r))
                 if r < SIZE - 1:
-                    lines.append(grid_sep())
-            lines.append(grid_bot())
+                    lines.append(grid_sep(SIZE, grid_style))
+            lines.append(grid_bot(SIZE, grid_style))
             return lines
 
         # Header & status

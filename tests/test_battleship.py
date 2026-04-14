@@ -183,6 +183,45 @@ def test_cursor_action_requires_full_fleet(game: Battleship):
         game.cursor_action(cur)
 
 
+def test_place_fleet_rejects_unknown_ship(game: Battleship):
+    s = game.initial_state(["alice", "bob"])
+    bad = _valid_fleet()
+    bad[0]["name"] = "Dreadnought"
+    with pytest.raises(IllegalAction, match="unknown ship"):
+        game.apply_action(s, "alice", {"type": "place_fleet", "ships": bad})
+
+
+def test_place_fleet_rejects_duplicate(game: Battleship):
+    s = game.initial_state(["alice", "bob"])
+    bad = _valid_fleet()
+    bad[1]["name"] = bad[0]["name"]
+    with pytest.raises(IllegalAction, match="duplicate|missing"):
+        game.apply_action(s, "alice", {"type": "place_fleet", "ships": bad})
+
+
+def test_place_fleet_vertical_direction(game: Battleship):
+    s = game.initial_state(["alice", "bob"])
+    vertical = [
+        {"name": name, "row": 0, "col": idx, "dir": "v"}
+        for idx, (name, _length, _mark) in enumerate(FLEET)
+    ]
+    s = game.apply_action(s, "alice", {"type": "place_fleet", "ships": vertical})
+    assert s["placed"]["alice"] is True
+
+
+def test_fire_out_of_turn_rejected(game: Battleship):
+    s = _placed_state(game)
+    with pytest.raises(IllegalAction, match="turn"):
+        game.apply_action(s, "bob", {"type": "fire", "row": 0, "col": 0})
+
+
+def test_turn_switches_after_hit(game: Battleship):
+    s = _placed_state(game)
+    s = game.apply_action(s, "alice", {"type": "fire", "row": 0, "col": 0})
+    assert s["last_shot"]["hit"] is True
+    assert s["turn_player"] == "bob"
+
+
 def test_sync_cursor_switches_to_battle(game: Battleship):
     s = _placed_state(game)
     cur = game.initial_cursor()
