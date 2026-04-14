@@ -1,12 +1,14 @@
 from ..engine import Game
 from .battleship import Battleship
 from .connect4 import Connect4
+from .reversi import Reversi
 from .tic_tac_toe import TicTacToe
 
 REGISTRY: dict[str, Game] = {
     TicTacToe.id: TicTacToe(),
     Connect4.id: Connect4(),
     Battleship.id: Battleship(),
+    Reversi.id: Reversi(),
 }
 
 

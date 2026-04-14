@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 FALL_FRAME_SECONDS = 0.05
 EXPLODE_FRAME_SECONDS = 0.12
 EXPLODE_FRAMES = 4
+FLIP_FRAME_SECONDS = 0.08
+FLIP_FRAMES = 4
 
 
 class MatchScreen(Screen):
@@ -176,6 +178,15 @@ class MatchScreen(Screen):
                 "frame": 0,
             }
             interval = EXPLODE_FRAME_SECONDS
+        elif kind == "flip":
+            self._anim = {
+                "type": "flip",
+                "cells": [list(c) for c in anim.get("cells", [])],
+                "at": list(anim.get("at") or []),
+                "to": anim.get("to"),
+                "frame": 0,
+            }
+            interval = FLIP_FRAME_SECONDS
         else:
             # Unknown animation — fall through.
             if self._pending_state is not None:
@@ -196,6 +207,15 @@ class MatchScreen(Screen):
                     "mark": self._anim["mark"],
                 }
             )
+        elif self._anim["type"] == "flip":
+            self.canvas.set_ui(
+                flipping={
+                    "cells": self._anim["cells"],
+                    "frame": self._anim["frame"],
+                    "at": self._anim["at"],
+                    "to": self._anim["to"],
+                }
+            )
         else:
             self.canvas.set_ui(
                 explosion={
@@ -213,6 +233,11 @@ class MatchScreen(Screen):
             if self._anim["row"] > self._anim["target_row"]:
                 self._finish_animation()
                 return
+        elif self._anim["type"] == "flip":
+            self._anim["frame"] += 1
+            if self._anim["frame"] >= FLIP_FRAMES:
+                self._finish_animation()
+                return
         else:
             self._anim["frame"] += 1
             if self._anim["frame"] >= EXPLODE_FRAMES:
@@ -226,7 +251,7 @@ class MatchScreen(Screen):
             self._animation_timer = None
         self._anim = None
         if self.canvas is not None:
-            self.canvas.set_ui(falling=None, explosion=None)
+            self.canvas.set_ui(falling=None, explosion=None, flipping=None)
         if self._pending_state is not None:
             self._set_displayed(self._pending_state)
             self._maybe_sync_cursor(self._pending_state)
