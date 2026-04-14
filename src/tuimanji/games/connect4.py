@@ -6,6 +6,7 @@ from textual.geometry import Size
 from textual.strip import Strip
 
 from ..engine import IllegalAction
+from ..ui.theme import style
 
 ROWS = 6
 COLS = 7
@@ -136,17 +137,18 @@ class Connect4:
         cursor = ui.get("cursor")
         active = ui.get("active", True)
         falling = ui.get("falling")  # {"col": c, "row": r, "mark": m} or None
+        theme = ui.get("theme")
 
         board = state["board"]
         marks = state.get("marks", {})
 
-        red_style = Style(color="bright_red", bold=True)
-        yellow_style = Style(color="bright_yellow", bold=True)
-        empty_style = Style(color="grey23")
-        grid_style = Style(color="blue")
-        cursor_active = Style(color="bright_green", bold=True)
-        cursor_inactive = Style(color="grey50")
-        header_style = Style(dim=True)
+        red_style = style(theme, "error", bold=True)
+        yellow_style = style(theme, "warning", bold=True)
+        empty_style = style(theme, "muted")
+        grid_style = style(theme, "primary")
+        cursor_active = style(theme, "success", bold=True)
+        cursor_inactive = style(theme, "muted")
+        header_style = style(theme, "muted", dim=True)
         chip_style = {"R": red_style, "Y": yellow_style}
 
         def chip_segment(ch: str) -> Segment:

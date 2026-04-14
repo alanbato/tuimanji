@@ -6,6 +6,7 @@ from textual.geometry import Size
 from textual.strip import Strip
 
 from ..engine import IllegalAction
+from ..ui.theme import bg_style, style
 
 EMPTY = "."
 LINES = [
@@ -119,13 +120,14 @@ class TicTacToe:
         cur = ui.get("cursor")
         cursor = (cur["row"], cur["col"]) if cur is not None else None
         active = ui.get("active", True)
+        theme = ui.get("theme")
 
-        x_style = Style(color="bright_cyan", bold=True)
-        o_style = Style(color="bright_magenta", bold=True)
-        grid_style = Style(color="grey50")
-        cursor_active = Style(bgcolor="yellow", color="black", bold=True)
-        cursor_inactive = Style(bgcolor="grey30", color="white")
-        styles = {"X": x_style, "O": o_style, EMPTY: Style(color="grey30")}
+        x_style = style(theme, "primary", bold=True)
+        o_style = style(theme, "accent", bold=True)
+        grid_style = style(theme, "muted")
+        cursor_active = bg_style(theme, "warning", color="black", bold=True)
+        cursor_inactive = bg_style(theme, "muted", color="white")
+        styles = {"X": x_style, "O": o_style, EMPTY: style(theme, "muted")}
 
         def cell_strip(row_idx: int) -> Strip:
             segs: list[Segment] = []
