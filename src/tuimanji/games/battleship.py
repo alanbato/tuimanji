@@ -1,4 +1,5 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, ClassVar
 
 from rich.segment import Segment
 from rich.style import Style
@@ -27,6 +28,25 @@ from ._common import (
 SIZE = 10
 HIT = "H"
 MISS = "M"
+
+
+@dataclass
+class ExplodeAnimation:
+    row: int
+    col: int
+    interval: float = 0.12
+    frames: int = 4
+    _GLYPHS: ClassVar[list[str]] = ["O", "o", "✸", "X"]
+
+    def overlay(self, frame: int) -> dict[str, Any]:
+        f = max(0, min(frame, self.frames - 1))
+        return {
+            "kind": "explode",
+            "row": self.row,
+            "col": self.col,
+            "glyph": self._GLYPHS[f],
+        }
+
 
 # (name, length, board-mark)
 FLEET: list[tuple[str, int, str]] = [
@@ -300,15 +320,11 @@ class Battleship:
 
     def animation_for(
         self, prev_state: dict[str, Any], new_state: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    ) -> ExplodeAnimation | None:
         shot = new_state.get("last_shot")
         if shot is None or not shot.get("hit"):
             return None
-        return {
-            "type": "explode",
-            "row": int(shot["row"]),
-            "col": int(shot["col"]),
-        }
+        return ExplodeAnimation(row=int(shot["row"]), col=int(shot["col"]))
 
     # ---------- render ----------
 
@@ -322,7 +338,8 @@ class Battleship:
         cursor = ui.get("cursor") or {}
         active = ui.get("active", True)
         me = ui.get("player")
-        explosion = ui.get("explosion")
+        anim = ui.get("animation")
+        explosion = anim if anim and anim.get("kind") == "explode" else None
         theme = ui.get("theme")
 
         order = state.get("order", [])
@@ -343,8 +360,6 @@ class Battleship:
         staged_style = style(theme, "accent")
         header_style = header_palette(theme)
         sunk_style = style(theme, "error", bold=True, strike=True)
-
-        explosion_frames = ["O", "o", "✸", "X"]
 
         # Pre-compute the in-progress ship preview cells (placement only).
         preview_cells: set[tuple[int, int]] = set()
@@ -420,9 +435,7 @@ class Battleship:
                 in_staged = (r, c) in staged_cells
 
                 if is_explosion and isinstance(explosion, dict):
-                    frame = int(explosion.get("frame", 0))
-                    frame = max(0, min(frame, len(explosion_frames) - 1))
-                    segs.extend(cell_segments(explosion_frames[frame], hit_style))
+                    segs.extend(cell_segments(str(explosion["glyph"]), hit_style))
                 elif phase == "placement" and is_cursor:
                     bg = cursor_active if active else cursor_inactive
                     segs.extend(cursor_bracket("#" if in_preview else "·", bg))

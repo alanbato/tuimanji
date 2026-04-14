@@ -24,6 +24,13 @@ class MatchNotFound(GameError):
     pass
 
 
+class Animation(Protocol):
+    interval: float
+    frames: int
+
+    def overlay(self, frame: int) -> dict[str, Any]: ...
+
+
 @runtime_checkable
 class Game(Protocol):
     id: str
@@ -57,4 +64,4 @@ class Game(Protocol):
         self,
         prev_state: dict[str, Any],
         new_state: dict[str, Any],
-    ) -> dict[str, Any] | None: ...
+    ) -> Animation | None: ...

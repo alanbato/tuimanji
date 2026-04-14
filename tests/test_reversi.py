@@ -3,7 +3,7 @@ from typing import cast
 import pytest
 
 from tuimanji.engine import IllegalAction
-from tuimanji.games.reversi import COLS, ROWS, Reversi, _legal_moves
+from tuimanji.games.reversi import COLS, ROWS, FlipAnimation, Reversi, _legal_moves
 
 
 @pytest.fixture
@@ -80,11 +80,13 @@ def test_animation_for_flip(game: Reversi):
     s0 = game.initial_state(["alice", "bob"])
     s1 = game.apply_action(s0, "alice", {"row": 2, "col": 3})
     anim = game.animation_for(s0, s1)
-    assert anim is not None
-    assert anim["type"] == "flip"
-    assert anim["cells"] == [[3, 3]]
-    assert anim["to"] == "B"
-    assert anim["at"] == [2, 3]
+    assert isinstance(anim, FlipAnimation)
+    assert anim.cells == [[3, 3]]
+    assert anim.to == "B"
+    assert anim.at == [2, 3]
+    overlay = anim.overlay(0)
+    assert overlay["kind"] == "flip"
+    assert overlay["glyph"] == "◐"
 
 
 def test_animation_none_without_flip(game: Reversi):

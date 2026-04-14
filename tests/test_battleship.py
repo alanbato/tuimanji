@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from tuimanji.engine import IllegalAction
-from tuimanji.games.battleship import FLEET, SIZE, Battleship
+from tuimanji.games.battleship import FLEET, SIZE, Battleship, ExplodeAnimation
 
 
 @pytest.fixture
@@ -141,9 +141,11 @@ def test_animation_for_hit_and_miss(game: Battleship):
     s0 = _placed_state(game)
     s_hit = game.apply_action(s0, "alice", {"type": "fire", "row": 0, "col": 0})
     anim = game.animation_for(s0, s_hit)
-    assert anim is not None
-    assert anim["type"] == "explode"
-    assert anim["row"] == 0 and anim["col"] == 0
+    assert isinstance(anim, ExplodeAnimation)
+    assert anim.row == 0 and anim.col == 0
+    assert anim.frames == 4
+    assert anim.overlay(0)["glyph"] == "O"
+    assert anim.overlay(3)["glyph"] == "X"
 
     s_miss = game.apply_action(s_hit, "bob", {"type": "fire", "row": 9, "col": 9})
     assert game.animation_for(s_hit, s_miss) is None

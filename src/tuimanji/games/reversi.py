@@ -1,4 +1,5 @@
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
 
 from rich.segment import Segment
 from textual.geometry import Size
@@ -34,7 +35,25 @@ DIRS = [
     (1, 0),
     (1, 1),
 ]
-FLIP_GLYPHS = ["◐", "◓", "◑", "◒"]
+
+
+@dataclass
+class FlipAnimation:
+    cells: list[list[int]] = field(default_factory=list)
+    at: list[int] = field(default_factory=list)
+    to: str = ""
+    interval: float = 0.08
+    frames: int = 4
+    _GLYPHS: ClassVar[list[str]] = ["◐", "◓", "◑", "◒"]
+
+    def overlay(self, frame: int) -> dict[str, Any]:
+        return {
+            "kind": "flip",
+            "cells": self.cells,
+            "at": self.at,
+            "to": self.to,
+            "glyph": self._GLYPHS[frame % self.frames],
+        }
 
 
 def _captures(
@@ -190,19 +209,18 @@ class Reversi:
 
     def animation_for(
         self, prev_state: dict[str, Any], new_state: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    ) -> FlipAnimation | None:
         flip = new_state.get("last_flip")
         if flip is None:
             return None
         cells = flip.get("cells") or []
         if not cells:
             return None
-        return {
-            "type": "flip",
-            "cells": [list(c) for c in cells],
-            "to": flip["to"],
-            "at": flip["at"],
-        }
+        return FlipAnimation(
+            cells=[list(c) for c in cells],
+            at=list(flip["at"]),
+            to=flip["to"],
+        )
 
     def render(
         self,
@@ -215,7 +233,8 @@ class Reversi:
         cursor = (cur["row"], cur["col"]) if cur is not None else None
         active = ui.get("active", True)
         theme = ui.get("theme")
-        flipping = ui.get("flipping")
+        anim = ui.get("animation")
+        flipping = anim if anim and anim.get("kind") == "flip" else None
         me = ui.get("player")
 
         board = state["board"]
@@ -240,12 +259,12 @@ class Reversi:
             hints = set(_legal_moves(board, turn_mark).keys())
 
         flip_cells: set[tuple[int, int]] = set()
-        flip_frame = 0
+        flip_glyph: str = ""
         flip_at: tuple[int, int] | None = None
         flip_to: str | None = None
         if flipping is not None:
             flip_cells = {(int(r), int(c)) for r, c in flipping.get("cells", [])}
-            flip_frame = int(flipping.get("frame", 0)) % len(FLIP_GLYPHS)
+            flip_glyph = str(flipping.get("glyph", ""))
             at = flipping.get("at")
             if at:
                 flip_at = (int(at[0]), int(at[1]))
@@ -257,7 +276,7 @@ class Reversi:
                 glyph = "●" if flip_to == "B" else "○"
                 st = glyph_styles[flip_to]
             elif (r, c) in flip_cells:
-                glyph = FLIP_GLYPHS[flip_frame]
+                glyph = flip_glyph
                 st = flip_style
             elif ch == "B":
                 glyph, st = "●", glyph_styles["B"]

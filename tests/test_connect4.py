@@ -1,7 +1,7 @@
 import pytest
 
 from tuimanji.engine import IllegalAction
-from tuimanji.games.connect4 import COLS, ROWS, Connect4
+from tuimanji.games.connect4 import COLS, ROWS, Connect4, FallAnimation
 
 
 @pytest.fixture
@@ -128,11 +128,12 @@ def test_animation_for_drop(game: Connect4):
     s0 = game.initial_state(["alice", "bob"])
     s1 = game.apply_action(s0, "alice", {"col": 2})
     anim = game.animation_for(s0, s1)
-    assert anim is not None
-    assert anim["type"] == "fall"
-    assert anim["col"] == 2
-    assert anim["target_row"] == ROWS - 1
-    assert anim["mark"] == "R"
+    assert isinstance(anim, FallAnimation)
+    assert anim.col == 2
+    assert anim.target_row == ROWS - 1
+    assert anim.mark == "R"
+    assert anim.frames == ROWS
+    assert anim.overlay(0) == {"kind": "fall", "col": 2, "row": 0, "mark": "R"}
 
 
 def test_animation_none_when_no_change(game: Connect4):

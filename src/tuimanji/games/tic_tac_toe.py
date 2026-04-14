@@ -113,7 +113,7 @@ class TicTacToe:
 
     def animation_for(
         self, prev_state: dict[str, Any], new_state: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    ) -> None:
         return None
 
     def render(

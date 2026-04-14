@@ -8,7 +8,7 @@ from textual.widgets import Footer, Static
 
 from .. import store
 from ..db import engine_for
-from ..engine import GameError, NotYourTurn
+from ..engine import Animation, GameError, NotYourTurn
 from ..games import get as get_game
 from .canvas import GameCanvas
 from .theme import palette_from_app
@@ -17,14 +17,6 @@ if TYPE_CHECKING:
     from textual.timer import Timer
 
     from ..app import TuimanjiApp
-
-
-# Per-frame duration for animations.
-FALL_FRAME_SECONDS = 0.05
-EXPLODE_FRAME_SECONDS = 0.12
-EXPLODE_FRAMES = 4
-FLIP_FRAME_SECONDS = 0.08
-FLIP_FRAMES = 4
 
 
 class MatchScreen(Screen):
@@ -59,7 +51,8 @@ class MatchScreen(Screen):
         self._last_active: bool | None = None
         self._displayed_state: dict[str, Any] | None = None
         self._animation_timer: "Timer | None" = None
-        self._anim: dict[str, Any] | None = None
+        self._animation: Animation | None = None
+        self._frame: int = 0
         self._pending_state: dict[str, Any] | None = None
         self._error_label: Static | None = None
         self._palette: dict[str, str] | None = None
@@ -159,99 +152,30 @@ class MatchScreen(Screen):
         if self.canvas is not None:
             self.canvas.set_state(state)
 
-    def _start_animation(self, anim: dict[str, Any]) -> None:
-        kind = anim.get("type")
-        if kind == "fall":
-            self._anim = {
-                "type": "fall",
-                "col": int(anim["col"]),
-                "target_row": int(anim["target_row"]),
-                "mark": anim["mark"],
-                "row": 0,
-            }
-            interval = FALL_FRAME_SECONDS
-        elif kind == "explode":
-            self._anim = {
-                "type": "explode",
-                "row": int(anim["row"]),
-                "col": int(anim["col"]),
-                "frame": 0,
-            }
-            interval = EXPLODE_FRAME_SECONDS
-        elif kind == "flip":
-            self._anim = {
-                "type": "flip",
-                "cells": [list(c) for c in anim.get("cells", [])],
-                "at": list(anim.get("at") or []),
-                "to": anim.get("to"),
-                "frame": 0,
-            }
-            interval = FLIP_FRAME_SECONDS
-        else:
-            # Unknown animation — fall through.
-            if self._pending_state is not None:
-                self._set_displayed(self._pending_state)
-                self._pending_state = None
-            return
-        self._push_anim_ui()
-        self._animation_timer = self.set_interval(interval, self._tick_animation)
-
-    def _push_anim_ui(self) -> None:
-        if self.canvas is None or self._anim is None:
-            return
-        if self._anim["type"] == "fall":
-            self.canvas.set_ui(
-                falling={
-                    "col": self._anim["col"],
-                    "row": self._anim["row"],
-                    "mark": self._anim["mark"],
-                }
-            )
-        elif self._anim["type"] == "flip":
-            self.canvas.set_ui(
-                flipping={
-                    "cells": self._anim["cells"],
-                    "frame": self._anim["frame"],
-                    "at": self._anim["at"],
-                    "to": self._anim["to"],
-                }
-            )
-        else:
-            self.canvas.set_ui(
-                explosion={
-                    "row": self._anim["row"],
-                    "col": self._anim["col"],
-                    "frame": self._anim["frame"],
-                }
-            )
+    def _start_animation(self, anim: Animation) -> None:
+        self._animation = anim
+        self._frame = 0
+        if self.canvas is not None:
+            self.canvas.set_ui(animation=anim.overlay(0))
+        self._animation_timer = self.set_interval(anim.interval, self._tick_animation)
 
     def _tick_animation(self) -> None:
-        if self._anim is None:
+        if self._animation is None:
             return
-        if self._anim["type"] == "fall":
-            self._anim["row"] += 1
-            if self._anim["row"] > self._anim["target_row"]:
-                self._finish_animation()
-                return
-        elif self._anim["type"] == "flip":
-            self._anim["frame"] += 1
-            if self._anim["frame"] >= FLIP_FRAMES:
-                self._finish_animation()
-                return
-        else:
-            self._anim["frame"] += 1
-            if self._anim["frame"] >= EXPLODE_FRAMES:
-                self._finish_animation()
-                return
-        self._push_anim_ui()
+        self._frame += 1
+        if self._frame >= self._animation.frames:
+            self._finish_animation()
+            return
+        if self.canvas is not None:
+            self.canvas.set_ui(animation=self._animation.overlay(self._frame))
 
     def _finish_animation(self) -> None:
         if self._animation_timer is not None:
             self._animation_timer.stop()
             self._animation_timer = None
-        self._anim = None
+        self._animation = None
         if self.canvas is not None:
-            self.canvas.set_ui(falling=None, explosion=None, flipping=None)
+            self.canvas.set_ui(animation=None)
         if self._pending_state is not None:
             self._set_displayed(self._pending_state)
             self._maybe_sync_cursor(self._pending_state)
@@ -262,7 +186,7 @@ class MatchScreen(Screen):
         if self._animation_timer is not None:
             self._animation_timer.stop()
             self._animation_timer = None
-        self._anim = None
+        self._animation = None
 
     def action_move(self, dr: int, dc: int) -> None:
         if self._animating:

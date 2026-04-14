@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 from rich.segment import Segment
@@ -23,6 +24,26 @@ from ._common import (
 ROWS = 6
 COLS = 7
 DIRS = [(0, 1), (1, 0), (1, 1), (1, -1)]
+
+
+@dataclass
+class FallAnimation:
+    col: int
+    target_row: int
+    mark: str
+    interval: float = 0.05
+
+    @property
+    def frames(self) -> int:
+        return self.target_row + 1
+
+    def overlay(self, frame: int) -> dict[str, Any]:
+        return {
+            "kind": "fall",
+            "col": self.col,
+            "row": frame,
+            "mark": self.mark,
+        }
 
 
 class Connect4:
@@ -123,7 +144,7 @@ class Connect4:
 
     def animation_for(
         self, prev_state: dict[str, Any], new_state: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    ) -> FallAnimation | None:
         drop = new_state.get("last_drop")
         if drop is None:
             return None
@@ -131,11 +152,10 @@ class Connect4:
         prev_board = prev_state.get("board")
         if prev_board is None:
             return None
-        # Sanity check: the target cell must have been empty in prev.
         if prev_board[target_row][col] != EMPTY:
             return None
         mark = new_state["board"][target_row][col]
-        return {"type": "fall", "col": col, "target_row": target_row, "mark": mark}
+        return FallAnimation(col=col, target_row=target_row, mark=mark)
 
     def render(
         self,
@@ -146,7 +166,8 @@ class Connect4:
         ui = ui or {}
         cursor = ui.get("cursor")
         active = ui.get("active", True)
-        falling = ui.get("falling")  # {"col": c, "row": r, "mark": m} or None
+        anim = ui.get("animation")
+        falling = anim if anim and anim.get("kind") == "fall" else None
         theme = ui.get("theme")
 
         board = state["board"]
