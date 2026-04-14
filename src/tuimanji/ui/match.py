@@ -7,7 +7,6 @@ from textual.screen import Screen
 from textual.widgets import Footer, Static
 
 from .. import store
-from ..db import engine_for
 from ..engine import Animation, GameError, NotYourTurn
 from ..games import get as get_game
 from .canvas import GameCanvas
@@ -44,7 +43,6 @@ class MatchScreen(Screen):
         self.game_id = game_id
         self.match_id = match_id
         self.game = get_game(game_id)
-        self.engine = engine_for(game_id)
         self.canvas: GameCanvas | None = None
         self._cursor: dict[str, Any] = self.game.initial_cursor()
         self._last_turn = -1
@@ -72,7 +70,7 @@ class MatchScreen(Screen):
     def compose(self) -> ComposeResult:
         with Vertical():
             with Horizontal():
-                latest = store.latest_state(self.engine, self.match_id)
+                latest = store.latest_state(self.match_id)
                 if latest is None:
                     raise RuntimeError(
                         f"MatchScreen opened for un-started match {self.match_id}"
@@ -112,7 +110,7 @@ class MatchScreen(Screen):
     def _refresh(self) -> None:
         if self._animating:
             return
-        latest = store.latest_state(self.engine, self.match_id)
+        latest = store.latest_state(self.match_id)
         if latest is None:
             return
         if latest.turn != self._last_turn:
@@ -199,7 +197,6 @@ class MatchScreen(Screen):
             return
         try:
             store.submit_action(
-                self.engine,
                 self.match_id,
                 self.me,
                 self.game.cursor_action(self._cursor),

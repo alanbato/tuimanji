@@ -8,7 +8,6 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, ListItem, ListView, Static
 
 from .. import store
-from ..db import engine_for
 from ..games import REGISTRY, all_games
 from .match import MatchScreen
 from .waiting import WaitingRoomScreen
@@ -89,13 +88,10 @@ class LobbyScreen(Screen):
     def _refresh_games(self) -> None:
         if self._games_list is None:
             return
-        counts: list[tuple[int, int]] = []
-        for gid in self._game_ids:
-            engine = engine_for(gid)
-            rows = store.list_matches(engine)
-            live = sum(1 for m in rows if m.status != "finished")
-            done = sum(1 for m in rows if m.status == "finished")
-            counts.append((live, done))
+        by_game = store.match_counts_by_game()
+        counts: list[tuple[int, int]] = [
+            by_game.get(gid, (0, 0)) for gid in self._game_ids
+        ]
         counts_t = tuple(counts)
         if counts_t == self._last_games_counts:
             return
@@ -117,9 +113,8 @@ class LobbyScreen(Screen):
     def _refresh_matches(self) -> None:
         if self._matches_table is None:
             return
-        engine = engine_for(self.selected_game_id)
         game = REGISTRY[self.selected_game_id]
-        rows = store.list_matches(engine)
+        rows = store.list_matches(self.selected_game_id)
         # Sort: waiting → active → finished, newest first within each bucket.
         bucket = {"waiting": 0, "active": 1, "finished": 2}
         rows.sort(key=lambda m: (bucket.get(m.status, 99), -m.created_at))
@@ -127,9 +122,9 @@ class LobbyScreen(Screen):
             (
                 m.id,
                 m.status,
-                len(store.match_players(engine, m.id)),
+                len(store.match_players(m.id)),
                 game.max_players,
-                tuple(store.match_players(engine, m.id)),
+                tuple(store.match_players(m.id)),
             )
             for m in rows
         )
@@ -165,21 +160,20 @@ class LobbyScreen(Screen):
             self._join_and_enter(self._match_ids[index])
 
     def _join_and_enter(self, match_id: str) -> None:
-        engine = engine_for(self.selected_game_id)
         game = REGISTRY[self.selected_game_id]
-        match = store.get_match(engine, match_id)
+        match = store.get_match(match_id)
         if match is None:
             self.notify("match no longer exists", severity="error")
             return
         if match.status == "waiting":
             try:
-                store.join_match(engine, game, match_id, self.me)
+                store.join_match(game, match_id, self.me)
             except Exception as e:
                 self.notify(f"join failed: {e}", severity="error")
                 return
             self.app.push_screen(WaitingRoomScreen(self.selected_game_id, match_id))
         elif match.status == "active":
-            if self.me not in store.match_players(engine, match_id):
+            if self.me not in store.match_players(match_id):
                 self.notify("match already started", severity="warning")
                 return
             self.app.push_screen(MatchScreen(self.selected_game_id, match_id))
@@ -187,9 +181,8 @@ class LobbyScreen(Screen):
             self.notify("match is finished", severity="information")
 
     def action_new_match(self) -> None:
-        engine = engine_for(self.selected_game_id)
         game = REGISTRY[self.selected_game_id]
-        match_id = store.create_match(engine, game, self.me)
+        match_id = store.create_match(game, self.me)
         self.notify(f"created match {match_id}")
         self._refresh()
         self.app.push_screen(WaitingRoomScreen(self.selected_game_id, match_id))

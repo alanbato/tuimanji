@@ -1,10 +1,11 @@
 import time
 import uuid
 
-from sqlalchemy import case
-from sqlalchemy.engine import Engine
+from sqlalchemy import case, func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
+from .db import get_engine
 from .engine import Game, MatchNotFound, NotYourTurn
 from .models import Action, Match, MatchPlayer, MatchState
 
@@ -13,9 +14,9 @@ def _now() -> int:
     return int(time.time())
 
 
-def create_match(engine: Engine, game: Game, creator: str) -> str:
-    match_id = uuid.uuid4().hex[:6]
-    with Session(engine) as s:
+def create_match(game: Game, creator: str) -> str:
+    match_id = uuid.uuid4().hex[:10]
+    with Session(get_engine()) as s:
         s.add(
             Match(
                 id=match_id,
@@ -34,8 +35,8 @@ def create_match(engine: Engine, game: Game, creator: str) -> str:
     return match_id
 
 
-def join_match(engine: Engine, game: Game, match_id: str, player: str) -> None:
-    with Session(engine) as s:
+def join_match(game: Game, match_id: str, player: str) -> None:
+    with Session(get_engine()) as s:
         match = s.get(Match, match_id)
         if match is None:
             raise MatchNotFound(match_id)
@@ -61,10 +62,10 @@ class MatchNotReady(Exception):
     pass
 
 
-def start_match(engine: Engine, game: Game, match_id: str, player: str) -> None:
+def start_match(game: Game, match_id: str, player: str) -> None:
     """Transition a waiting match to active. Only the creator may start, and
     only once min_players seats are filled."""
-    with Session(engine) as s:
+    with Session(get_engine()) as s:
         match = s.get(Match, match_id)
         if match is None:
             raise MatchNotFound(match_id)
@@ -99,13 +100,13 @@ def start_match(engine: Engine, game: Game, match_id: str, player: str) -> None:
         s.commit()
 
 
-def get_match(engine: Engine, match_id: str) -> Match | None:
-    with Session(engine) as s:
+def get_match(match_id: str) -> Match | None:
+    with Session(get_engine()) as s:
         return s.get(Match, match_id)
 
 
-def latest_state(engine: Engine, match_id: str) -> MatchState | None:
-    with Session(engine) as s:
+def latest_state(match_id: str) -> MatchState | None:
+    with Session(get_engine()) as s:
         stmt = (
             select(MatchState)
             .where(MatchState.match_id == match_id)
@@ -115,19 +116,44 @@ def latest_state(engine: Engine, match_id: str) -> MatchState | None:
         return s.scalars(stmt).first()
 
 
-def list_matches(engine: Engine, status: str | None = None) -> list[Match]:
-    with Session(engine) as s:
-        stmt = select(Match).order_by(col(Match.created_at).desc())
+def list_matches(game_id: str, status: str | None = None) -> list[Match]:
+    with Session(get_engine()) as s:
+        stmt = (
+            select(Match)
+            .where(col(Match.game_id) == game_id)
+            .order_by(col(Match.created_at).desc())
+        )
         if status is not None:
-            stmt = stmt.where(Match.status == status)
+            stmt = stmt.where(col(Match.status) == status)
         return list(s.scalars(stmt))
 
 
-def best_resumable(engine: Engine, player_id: str) -> Match | None:
-    """Return the single match `player_id` should resume in this engine, or
-    None. Active before waiting, newest first within each bucket.
+def match_counts_by_game() -> dict[str, tuple[int, int]]:
+    """Return `{game_id: (live, done)}` for every game that has at least one
+    match. Callers should default missing games to (0, 0)."""
+    with Session(get_engine()) as s:
+        stmt = select(
+            Match.game_id,
+            Match.status,
+            func.count().label("n"),
+        ).group_by(col(Match.game_id), col(Match.status))
+        counts: dict[str, tuple[int, int]] = {}
+        for game_id, status, n in s.execute(stmt):
+            live, done = counts.get(game_id, (0, 0))
+            if status == "finished":
+                done += int(n)
+            else:
+                live += int(n)
+            counts[game_id] = (live, done)
+        return counts
+
+
+def best_resumable(player_id: str) -> tuple[str, Match] | None:
+    """Return `(game_id, match)` for the single match `player_id` should
+    resume across all games, or None. Active before waiting, newest first
+    within each bucket.
     """
-    with Session(engine) as s:
+    with Session(get_engine()) as s:
         priority = case((col(Match.status) == "active", 0), else_=1)
         stmt = (
             select(Match)
@@ -137,11 +163,21 @@ def best_resumable(engine: Engine, player_id: str) -> Match | None:
             .order_by(priority, col(Match.created_at).desc())
             .limit(1)
         )
-        return s.scalars(stmt).first()
+        match = s.scalars(stmt).first()
+        if match is None:
+            return None
+        return match.game_id, match
 
 
-def match_players(engine: Engine, match_id: str) -> list[str]:
-    with Session(engine) as s:
+def find_match_game(match_id: str) -> str | None:
+    """Return the `game_id` of the match with this id, or None."""
+    with Session(get_engine()) as s:
+        match = s.get(Match, match_id)
+        return match.game_id if match is not None else None
+
+
+def match_players(match_id: str) -> list[str]:
+    with Session(get_engine()) as s:
         stmt = (
             select(MatchPlayer)
             .where(MatchPlayer.match_id == match_id)
@@ -150,10 +186,8 @@ def match_players(engine: Engine, match_id: str) -> list[str]:
         return [mp.player_id for mp in s.scalars(stmt)]
 
 
-def submit_action(
-    engine: Engine, match_id: str, player: str, action: dict, game: Game
-) -> MatchState:
-    with Session(engine) as s:
+def submit_action(match_id: str, player: str, action: dict, game: Game) -> MatchState:
+    with Session(get_engine()) as s:
         latest = s.scalars(
             select(MatchState)
             .where(MatchState.match_id == match_id)
@@ -190,6 +224,21 @@ def submit_action(
             match = s.get(Match, match_id)
             if match is not None:
                 match.status = "finished"
-        s.commit()
+        try:
+            s.commit()
+        except IntegrityError:
+            # Lost the `(match_id, turn)` unique-constraint race against
+            # another writer. Re-read latest and surface NotYourTurn so the
+            # UI's existing handler takes over instead of a raw SQL error.
+            s.rollback()
+            latest_after = s.scalars(
+                select(MatchState)
+                .where(MatchState.match_id == match_id)
+                .order_by(col(MatchState.turn).desc())
+                .limit(1)
+            ).first()
+            raise NotYourTurn(
+                player, latest_after.current if latest_after else None
+            ) from None
         s.refresh(new_row)
         return new_row

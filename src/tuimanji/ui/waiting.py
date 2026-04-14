@@ -7,7 +7,6 @@ from textual.screen import Screen
 from textual.widgets import Footer, Static
 
 from .. import store
-from ..db import engine_for
 from ..games import get as get_game
 from ..store import MatchNotReady
 from .match import MatchScreen
@@ -35,7 +34,6 @@ class WaitingRoomScreen(Screen):
         self.game_id = game_id
         self.match_id = match_id
         self.game = get_game(game_id)
-        self.engine = engine_for(game_id)
         self._players_label: Static | None = None
         self._title: Static | None = None
         self._hint: Static | None = None
@@ -52,7 +50,7 @@ class WaitingRoomScreen(Screen):
 
     @property
     def is_host(self) -> bool:
-        match = store.get_match(self.engine, self.match_id)
+        match = store.get_match(self.match_id)
         return match is not None and match.created_by == self.me
 
     def compose(self) -> ComposeResult:
@@ -72,7 +70,7 @@ class WaitingRoomScreen(Screen):
         self.set_interval(0.5, self._refresh)
 
     def _refresh(self) -> None:
-        match = store.get_match(self.engine, self.match_id)
+        match = store.get_match(self.match_id)
         if match is None:
             self.app.pop_screen()
             return
@@ -80,7 +78,7 @@ class WaitingRoomScreen(Screen):
             # Someone started it — transition into the match screen.
             self.app.switch_screen(MatchScreen(self.game_id, self.match_id))
             return
-        players = store.match_players(self.engine, self.match_id)
+        players = store.match_players(self.match_id)
         snapshot = tuple(players)
         if snapshot != self._last_snapshot:
             self._last_snapshot = snapshot
@@ -103,7 +101,7 @@ class WaitingRoomScreen(Screen):
 
     def action_start(self) -> None:
         try:
-            store.start_match(self.engine, self.game, self.match_id, self.me)
+            store.start_match(self.game, self.match_id, self.me)
         except MatchNotReady as e:
             if self._error:
                 self._error.update(str(e))

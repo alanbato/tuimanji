@@ -2,9 +2,11 @@ import fcntl
 import os
 from pathlib import Path
 
+from sqlmodel import Session, col, select
+
 from . import store
-from .db import db_dir, engine_for
-from .games import all_games
+from .db import db_dir, get_engine
+from .models import Match, MatchPlayer
 
 MAX_SLOTS = 16
 
@@ -48,34 +50,32 @@ def find_resume_target(player_id: str) -> tuple[str, str, str] | None:
     resume, or None if there isn't one. Prefers active matches over waiting
     ones, newest first within each bucket.
     """
-    candidates = (
-        (game.id, m)
-        for game in all_games()
-        if (m := store.best_resumable(engine_for(game.id), player_id)) is not None
-    )
-    best = min(
-        candidates,
-        key=lambda gm: (gm[1].status != "active", -gm[1].created_at),
-        default=None,
-    )
-    if best is None:
+    found = store.best_resumable(player_id)
+    if found is None:
         return None
-    game_id, m = best
-    return game_id, m.id, m.status
+    game_id, match = found
+    return game_id, match.id, match.status
 
 
 def _resumable_slots(user: str) -> list[int]:
-    slots: set[int] = set()
-    for game in all_games():
-        engine = engine_for(game.id)
-        for m in store.list_matches(engine):
-            if m.status == "finished":
-                continue
-            for pid in store.match_players(engine, m.id):
-                slot = _parse_slot(user, pid)
-                if slot is not None and 0 <= slot < MAX_SLOTS:
-                    slots.add(slot)
-    return sorted(slots)
+    prefix = f"{user}#"
+    with Session(get_engine()) as s:
+        stmt = (
+            select(MatchPlayer.player_id)
+            .join(Match, col(Match.id) == col(MatchPlayer.match_id))
+            .where(col(Match.status) != "finished")
+            .where(
+                (col(MatchPlayer.player_id) == user)
+                | col(MatchPlayer.player_id).startswith(prefix)
+            )
+            .distinct()
+        )
+        slots: set[int] = set()
+        for (pid,) in s.execute(stmt):
+            slot = _parse_slot(user, pid)
+            if slot is not None and 0 <= slot < MAX_SLOTS:
+                slots.add(slot)
+        return sorted(slots)
 
 
 def acquire(user: str) -> tuple[int, str]:
