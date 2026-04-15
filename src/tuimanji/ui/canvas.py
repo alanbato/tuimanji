@@ -12,6 +12,7 @@ class GameCanvas(Widget, can_focus=True):
         width: 1fr;
         height: 1fr;
         content-align: center middle;
+        background: $surface;
     }
     """
 

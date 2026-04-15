@@ -22,6 +22,7 @@ _KEYS = (
     "foreground",
     "muted",
     "background",
+    "surface",
 )
 
 # Last-ditch fallbacks if the theme dict is missing or doesn't define a key.
@@ -34,6 +35,7 @@ _FALLBACKS: dict[str, str] = {
     "foreground": "white",
     "muted": "grey50",
     "background": "black",
+    "surface": "grey15",
 }
 
 
@@ -54,6 +56,54 @@ def palette_from_app(app: App) -> dict[str, str]:
         raw = tv.get(source)
         palette[key] = _strip_alpha(raw) if raw else _FALLBACKS[key]
     return palette
+
+
+def _resolve(theme: dict[str, Any] | None, key: str) -> str | None:
+    raw = (theme or {}).get(key) or _FALLBACKS.get(key)
+    return _strip_alpha(raw) if raw else None
+
+
+def contrast_style(theme: dict[str, Any] | None, bg_key: str, **kwargs: Any) -> Style:
+    """Pick a foreground color that contrasts with the theme's `bg_key`.
+
+    Uses Textual's `Color.get_contrast_text` so labels stay legible against
+    whichever theme is active. Falls back to a plain Style when the color
+    can't be parsed (tests, bad input).
+    """
+    raw = _resolve(theme, bg_key)
+    if raw is None:
+        return Style(**kwargs)
+    return contrast_on_hex(raw, **kwargs)
+
+
+def contrast_on_hex(bg_hex: str, **kwargs: Any) -> Style:
+    """Like `contrast_style` but against an explicit hex (use for computed bgs)."""
+    from textual.color import Color as TextualColor
+
+    try:
+        fg = TextualColor.parse(bg_hex).get_contrast_text()
+    except Exception:
+        return Style(**kwargs)
+    return Style(color=_strip_alpha(fg.hex), **kwargs)
+
+
+def shifted_color(theme: dict[str, Any] | None, key: str, delta: float) -> str:
+    """Return `theme[key]`'s hex with luminance shifted by `delta`.
+
+    Positive `delta` lightens, negative darkens. Used to derive paired
+    foreground/background shades (e.g. dark vs light checker squares) from
+    a single theme semantic, so the result tracks the active theme instead
+    of inverting on light themes the way text colors do.
+    """
+    from textual.color import Color as TextualColor
+
+    raw = _resolve(theme, key) or "#808080"
+    try:
+        c = TextualColor.parse(raw)
+    except Exception:
+        return raw
+    shifted = c.lighten(delta) if delta >= 0 else c.darken(-delta)
+    return _strip_alpha(shifted.hex)
 
 
 def style(theme: dict[str, Any] | None, key: str, **kwargs: Any) -> Style:

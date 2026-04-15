@@ -1,5 +1,6 @@
 from ..engine import Game
 from .battleship import Battleship
+from .checkers import Checkers
 from .chess import Chess
 from .connect4 import Connect4
 from .peg_solitaire import PegSolitaire
@@ -12,6 +13,7 @@ REGISTRY: dict[str, Game] = {
     Battleship.id: Battleship(),
     Reversi.id: Reversi(),
     Chess.id: Chess(),
+    Checkers.id: Checkers(),
     PegSolitaire.id: PegSolitaire(),
 }
 
