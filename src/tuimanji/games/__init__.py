@@ -2,6 +2,7 @@ from ..engine import Game
 from .battleship import Battleship
 from .chess import Chess
 from .connect4 import Connect4
+from .peg_solitaire import PegSolitaire
 from .reversi import Reversi
 from .tic_tac_toe import TicTacToe
 
@@ -11,6 +12,7 @@ REGISTRY: dict[str, Game] = {
     Battleship.id: Battleship(),
     Reversi.id: Reversi(),
     Chess.id: Chess(),
+    PegSolitaire.id: PegSolitaire(),
 }
 
 

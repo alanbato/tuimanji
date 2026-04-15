@@ -39,6 +39,10 @@ class TuimanjiApp(App):
     def _start_new_match(self, game_id: str) -> None:
         game = REGISTRY[game_id]
         match_id = store.create_match(game, self.player_id)
+        if game.max_players == 1:
+            store.start_match(game, match_id, self.player_id)
+            self.push_screen(MatchScreen(game_id, match_id))
+            return
         self.push_screen(WaitingRoomScreen(game_id, match_id))
 
     def _join_match(self, match_id: str) -> None:

@@ -185,6 +185,10 @@ class LobbyScreen(Screen):
         match_id = store.create_match(game, self.me)
         self.notify(f"created match {match_id}")
         self._refresh()
+        if game.max_players == 1:
+            store.start_match(game, match_id, self.me)
+            self.app.push_screen(MatchScreen(self.selected_game_id, match_id))
+            return
         self.app.push_screen(WaitingRoomScreen(self.selected_game_id, match_id))
 
     def action_refresh(self) -> None:
