@@ -84,6 +84,9 @@ class MatchScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        init_for = getattr(self.game, "init_cursor_for", None)
+        if init_for is not None and self._displayed_state is not None:
+            self._cursor = init_for(self.me, self._displayed_state)
         self._push_cursor_ui()
         self._refresh()
         self.set_interval(0.5, self._refresh)
@@ -195,6 +198,20 @@ class MatchScreen(Screen):
     def action_place(self) -> None:
         if self._animating:
             return
+        prepare = getattr(self.game, "prepare_action", None)
+        if prepare is not None and self._displayed_state is not None:
+            try:
+                new_cursor = prepare(self._cursor, self._displayed_state)
+            except GameError as e:
+                if self._error_label:
+                    self._error_label.update(str(e))
+                return
+            if new_cursor is not None and new_cursor is not self._cursor:
+                self._cursor = new_cursor
+                if self._error_label:
+                    self._error_label.update("")
+                self._push_cursor_ui()
+                return
         try:
             store.submit_action(
                 self.match_id,
