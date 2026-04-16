@@ -13,8 +13,6 @@ from ..ui.theme import style
 from ._common import (
     cursor_bracket,
     cursor_palette,
-    header_palette,
-    order_header,
     status_strip,
 )
 
@@ -275,58 +273,74 @@ class CrazyEights:
         cursor = ui.get("cursor", {})
         active = ui.get("active", False) and not self.is_terminal(state)
         cursor_active, cursor_inactive = cursor_palette(theme)
-        hdr_style = header_palette(theme)
-        muted = style(theme, "muted")
+        muted_sty = style(theme, "muted")
         grid_sty = style(theme, "primary")
+        back_sty = style(theme, "muted", dim=True)
+        turn = state["turn_player"]
+        order = state["order"]
 
         lines: list[Strip] = []
 
-        # order header with card counts
-        lines.append(order_header(state, hdr_style, marks_key="card_counts"))
+        # --- opponents: face-down cards in turn order ---
+        if me and me in order:
+            my_idx = order.index(me)
+            opponents = order[my_idx + 1 :] + order[:my_idx]
+        else:
+            opponents = list(order)
+
+        for i, opp in enumerate(opponents):
+            is_turn = opp == turn
+            name_sty = style(theme, "warning", bold=True) if is_turn else muted_sty
+            prefix = "  ▸ " if is_turn else "    "
+            lines.append(Strip([Segment(prefix + opp, name_sty)]))
+            count = len(state["hands"].get(opp, []))
+            segs: list[Segment] = [Segment("    ")]
+            for _ in range(count):
+                segs.append(Segment(" 🂠 ", back_sty))
+            lines.append(Strip(segs))
+            if i < len(opponents) - 1:
+                lines.append(Strip.blank(0))
+
         lines.append(Strip.blank(0))
 
-        # discard pile
+        # --- center: discard pile + draw pile ---
         top_card = state["discard"][-1]
         tg = _card_glyph(top_card)
         ts = _card_style(top_card, theme)
-        lines.append(Strip([Segment("        ┌────┐", grid_sty)]))
+        deck_count = len(state["deck"])
+        dc_pad = f" {deck_count:>2} "
+
+        lines.append(Strip([Segment("      ┌────┐  ┌────┐", grid_sty)]))
         lines.append(
             Strip(
                 [
-                    Segment("        │ ", grid_sty),
+                    Segment("      │ ", grid_sty),
                     Segment(tg, ts),
-                    Segment(" │", grid_sty),
+                    Segment(" │  │", grid_sty),
+                    Segment(dc_pad, muted_sty),
+                    Segment("│", grid_sty),
                 ]
             )
         )
-        lines.append(Strip([Segment("        └────┘", grid_sty)]))
+        lines.append(Strip([Segment("      └────┘  └────┘", grid_sty)]))
 
-        # suit + deck info
+        # suit indicator
         sg = SUIT_GLYPHS[state["current_suit"]]
         if state["current_suit"] in RED_SUITS:
             ss = style(theme, "error", bold=True)
         else:
             ss = style(theme, "foreground", bold=True)
-        deck_count = len(state["deck"])
-        lines.append(
-            Strip(
-                [
-                    Segment("     Suit: ", muted),
-                    Segment(sg, ss),
-                    Segment(f"   Deck: {deck_count}", muted),
-                ]
-            )
-        )
+        lines.append(Strip([Segment("       Suit: ", muted_sty), Segment(sg, ss)]))
         lines.append(Strip.blank(0))
 
-        # player's hand
+        # --- player's hand ---
         if me and me in state.get("hands", {}):
             hand = state["hands"][me]
             total_slots = max(len(hand) + 1, 1)
             phase = cursor.get("phase", "hand")
             cursor_pos = cursor.get("index", 0) % total_slots
 
-            segs: list[Segment] = [Segment("  ")]
+            segs = [Segment("  ")]
             for i, card in enumerate(hand):
                 glyph = _card_glyph(card)
                 if i == cursor_pos and phase == "hand":
@@ -346,14 +360,19 @@ class CrazyEights:
                 bg = cursor_active if active else cursor_inactive
                 segs.extend(cursor_bracket("Draw", bg))
             else:
-                segs.extend([Segment(" "), Segment("Draw", muted), Segment(" ")])
+                segs.extend([Segment(" "), Segment("Draw", muted_sty), Segment(" ")])
             lines.append(Strip(segs))
+
+            is_my_turn = me == turn
+            name_sty = style(theme, "warning", bold=True) if is_my_turn else muted_sty
+            prefix = "  ▸ " if is_my_turn else "    "
+            lines.append(Strip([Segment(prefix + me, name_sty)]))
         else:
-            lines.append(Strip([Segment("  (spectating)", muted)]))
+            lines.append(Strip([Segment("  (spectating)", muted_sty)]))
 
         # suit picker or blank
         if me and cursor.get("phase") == "suit":
-            suit_segs: list[Segment] = [Segment("  Choose suit:  ", muted)]
+            suit_segs: list[Segment] = [Segment("  Choose suit:  ", muted_sty)]
             si = cursor.get("suit_index", 0)
             for i, s in enumerate(SUITS):
                 g = SUIT_GLYPHS[s]
@@ -380,9 +399,9 @@ class CrazyEights:
             lines.append(status_strip(f"  {w} wins!"))
         elif cursor.get("phase") == "suit":
             lines.append(status_strip("  Choose a suit for your 8"))
-        elif state["turn_player"] == me:
+        elif turn == me:
             lines.append(status_strip("  Play a card or draw"))
         else:
-            lines.append(status_strip(f"  Waiting for {state['turn_player']}…"))
+            lines.append(status_strip(f"  Waiting for {turn}…"))
 
         return lines
