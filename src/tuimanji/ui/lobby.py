@@ -160,23 +160,28 @@ class LobbyScreen(Screen):
             self._join_and_enter(self._match_ids[index])
 
     def _join_and_enter(self, match_id: str) -> None:
-        game = REGISTRY[self.selected_game_id]
         match = store.get_match(match_id)
         if match is None:
             self.notify("match no longer exists", severity="error")
             return
+        # Always trust `match.game_id` — the matches table is filtered by
+        # `selected_game_id` but can go stale relative to concurrent writers.
+        # Using the wrong game here would write state of one shape onto a
+        # match whose id records a different game.
+        game_id = match.game_id
+        game = REGISTRY[game_id]
         if match.status == "waiting":
             try:
                 store.join_match(game, match_id, self.me)
             except Exception as e:
                 self.notify(f"join failed: {e}", severity="error")
                 return
-            self.app.push_screen(WaitingRoomScreen(self.selected_game_id, match_id))
+            self.app.push_screen(WaitingRoomScreen(game_id, match_id))
         elif match.status == "active":
             if self.me not in store.match_players(match_id):
                 self.notify("match already started", severity="warning")
                 return
-            self.app.push_screen(MatchScreen(self.selected_game_id, match_id))
+            self.app.push_screen(MatchScreen(game_id, match_id))
         else:
             self.notify("match is finished", severity="information")
 

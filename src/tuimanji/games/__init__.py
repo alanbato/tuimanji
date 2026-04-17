@@ -6,6 +6,7 @@ from .connect4 import Connect4
 from .crazy_eights import CrazyEights
 from .peg_solitaire import PegSolitaire
 from .reversi import Reversi
+from .royal_ur import RoyalUr
 from .tic_tac_toe import TicTacToe
 
 REGISTRY: dict[str, Game] = {
@@ -17,6 +18,7 @@ REGISTRY: dict[str, Game] = {
     Checkers.id: Checkers(),
     PegSolitaire.id: PegSolitaire(),
     CrazyEights.id: CrazyEights(),
+    RoyalUr.id: RoyalUr(),
 }
 
 

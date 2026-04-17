@@ -150,17 +150,31 @@ def match_counts_by_game() -> dict[str, tuple[int, int]]:
 
 def best_resumable(player_id: str) -> tuple[str, Match] | None:
     """Return `(game_id, match)` for the single match `player_id` should
-    resume across all games, or None. Active before waiting, newest first
-    within each bucket.
+    resume across all games, or None. Active before waiting; within each
+    bucket, the match where the player most recently took a turn wins, with
+    `match.created_at` as a fallback for matches where they haven't acted
+    yet (so freshly-joined waiting rooms still surface).
     """
     with Session(get_engine()) as s:
         priority = case((col(Match.status) == "active", 0), else_=1)
+        # Most-recent action timestamp for this player, per match.
+        last_action = (
+            select(
+                col(Action.match_id).label("mid"),
+                func.max(col(Action.created_at)).label("last_ts"),
+            )
+            .where(col(Action.player_id) == player_id)
+            .group_by(col(Action.match_id))
+            .subquery()
+        )
+        engaged = func.coalesce(last_action.c.last_ts, col(Match.created_at))
         stmt = (
             select(Match)
             .join(MatchPlayer, col(MatchPlayer.match_id) == col(Match.id))
+            .outerjoin(last_action, last_action.c.mid == col(Match.id))
             .where(col(MatchPlayer.player_id) == player_id)
             .where(col(Match.status) != "finished")
-            .order_by(priority, col(Match.created_at).desc())
+            .order_by(priority, engaged.desc())
             .limit(1)
         )
         match = s.scalars(stmt).first()

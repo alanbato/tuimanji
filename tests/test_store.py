@@ -158,6 +158,34 @@ def test_best_resumable_picks_active_over_waiting(engine, game):
     assert match.status == "active"
 
 
+def test_best_resumable_prefers_where_player_last_acted(engine, game):
+    # Two active tic-tac-toe matches for alice. The second was created more
+    # recently, but alice took her most recent turn in the FIRST one.
+    older = _seat_and_start(game, creator="alice", opponent="bob")
+    _ = _seat_and_start(game, creator="alice", opponent="carol")
+    # Alice acts in `older` after `newer` was created → older's action_ts
+    # exceeds newer's match.created_at.
+    store.submit_action(older, "alice", {"row": 0, "col": 0}, game)
+    found = store.best_resumable("alice")
+    assert found is not None
+    _, match = found
+    assert match.id == older
+
+
+def test_best_resumable_falls_back_to_match_created_at(engine, game, monkeypatch):
+    # Both matches are freshly seated with no actions; fall back to created_at.
+    # `_now` resolution is 1s, so fake the clock to get distinct timestamps.
+    clock = iter([100, 100, 200, 200])
+    monkeypatch.setattr(store, "_now", lambda: next(clock))
+    first = _seat_and_start(game, creator="alice", opponent="bob")
+    second = _seat_and_start(game, creator="alice", opponent="carol")
+    found = store.best_resumable("alice")
+    assert found is not None
+    _, match = found
+    assert match.id == second
+    _ = first
+
+
 def test_submit_action_converts_integrity_error_to_not_your_turn(engine, game):
     match_id = _seat_and_start(game)
     # Manually insert a colliding turn-1 MatchState so alice's submit trips
