@@ -1,3 +1,10 @@
+"""Tic-Tac-Toe — 3×3 grid, first to three in a row wins.
+
+Action schema::
+
+    {"row": int, "col": int}   # 0..2 each
+"""
+
 from typing import Any
 
 from rich.segment import Segment

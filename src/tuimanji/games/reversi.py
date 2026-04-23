@@ -1,3 +1,14 @@
+"""Reversi / Othello — 8×8 grid, flank-and-flip, most stones wins.
+
+Action schema::
+
+    {"row": int, "col": int}   # 0..7 each
+
+A turn is skipped automatically (no legal moves); the match ends when
+neither player can move. State stores ``flipped`` from the last move so
+:meth:`animation_for` can replay the cascade.
+"""
+
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 

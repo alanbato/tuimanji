@@ -1,24 +1,61 @@
 [project]
 name = "tuimanji"
 version = "0.1.0"
-description = "Add your description here"
+description = "Pubnix-local turn-based multiplayer TUI for tic-tac-toe, chess, checkers, Reversi, Battleship, Connect 4, Crazy Eights, Royal Game of Ur, and peg solitaire."
 readme = "README.md"
 authors = [
     { name = "Alan Velasco", email = "alanvelasco.a@gmail.com" }
 ]
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.13"
+keywords = [
+    "tui",
+    "textual",
+    "multiplayer",
+    "game",
+    "board-game",
+    "pubnix",
+    "sqlite",
+    "terminal",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Console :: Curses",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+    "Topic :: Games/Entertainment :: Board Games",
+    "Topic :: Games/Entertainment :: Turn Based Strategy",
+    "Typing :: Typed",
+]
 dependencies = [
     "sqlmodel>=0.0.38",
     "textual>=8.2.3",
     "typer>=0.24.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/alanbato/tuimanji"
+Source = "https://github.com/alanbato/tuimanji"
+Issues = "https://github.com/alanbato/tuimanji/issues"
+Changelog = "https://github.com/alanbato/tuimanji/blob/main/CHANGELOG.md"
+
 [project.scripts]
-tuimanji = "tuimanji:main"
+tuimanji = "tuimanji.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.10.4,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "tuimanji"
 
 [dependency-groups]
 dev = [
@@ -30,3 +67,7 @@ dev = [
     "ruff>=0.15.10",
     "ty>=0.0.29",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

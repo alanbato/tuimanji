@@ -1,3 +1,16 @@
+"""Session slots — per-process identity keyed off unix user.
+
+Two terminals logged in as the same unix user get *distinct* player ids by
+claiming different slots: slot 0 is bare ``user``, slot ≥1 is
+``user#{slot+1}``. Each slot is guarded by an ``flock`` on
+``$TUIMANJI_DB/.sessions/<user>/<N>.lock``; the lock is held for process
+lifetime and released by the OS on exit (including crash).
+
+:func:`acquire` prefers slots that already have a seat in an unfinished
+match, so a crashed process relaunches into its old identity and can
+rejoin its seat rather than claiming a fresh one.
+"""
+
 import fcntl
 import os
 from pathlib import Path

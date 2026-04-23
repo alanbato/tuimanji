@@ -1,3 +1,17 @@
+"""Battleship — 10×10 grids, hidden ship placement, alternate firing.
+
+Two phases keyed off ``state["phase"]``:
+
+- ``"place"`` — each player submits ``{"type": "place", "ships": [...]}``
+  with ship positions; phase advances to ``"fire"`` once both have placed.
+- ``"fire"`` — players alternate ``{"type": "fire", "row": r, "col": c}``
+  until one side has all ships sunk.
+
+Hidden information is handled at render time via ``ui["viewer"]`` — the
+engine keeps full state, and ``render`` masks the opponent's ships for
+the viewer.
+"""
+
 from dataclasses import dataclass
 from typing import Any, ClassVar
 

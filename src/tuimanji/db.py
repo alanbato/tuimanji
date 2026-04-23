@@ -1,3 +1,11 @@
+"""SQLite engine bootstrap.
+
+One engine per process, keyed off ``$TUIMANJI_DB`` (default
+``/var/games/tuimanji``). WAL mode, 5s busy timeout, and
+``BEGIN IMMEDIATE`` on every transaction — see :mod:`tuimanji.store` for
+why the last one matters.
+"""
+
 import os
 from pathlib import Path
 
@@ -13,6 +21,7 @@ _engine: Engine | None = None
 
 
 def db_dir() -> Path:
+    """Return the directory holding ``tuimanji.db``, creating it if missing."""
     raw = os.environ.get("TUIMANJI_DB")
     path = Path(raw) if raw else DEFAULT_DB_DIR
     path.mkdir(parents=True, exist_ok=True)
@@ -20,6 +29,7 @@ def db_dir() -> Path:
 
 
 def db_path() -> Path:
+    """Return the path to ``tuimanji.db`` inside :func:`db_dir`."""
     return db_dir() / "tuimanji.db"
 
 
@@ -54,6 +64,7 @@ def _make_engine() -> Engine:
 
 
 def get_engine() -> Engine:
+    """Return the cached module-level engine, creating it on first call."""
     global _engine
     if _engine is None:
         _engine = _make_engine()

@@ -1,41 +1,49 @@
-import typer
+"""Tuimanji — pubnix-local turn-based multiplayer TUI.
 
-from .app import TuimanjiApp
-from .games import REGISTRY
+There is intentionally no server process: clients on the same machine share
+state via a single SQLite WAL database at ``$TUIMANJI_DB/tuimanji.db``.
 
+The :class:`Game` protocol is the extension point — implement
+``initial_state``, ``apply_action``, ``current_player``, ``winner``,
+``is_terminal``, ``render``, and the cursor trio, then register the class in
+:data:`tuimanji.games.REGISTRY`. All game logic is pure: no I/O, no DB,
+trivially unit-testable.
 
-def _run(
-    resume: bool = typer.Option(
-        False,
-        "--resume",
-        "-r",
-        help="Jump straight into your most recent unfinished match.",
-    ),
-    new: str | None = typer.Option(
-        None,
-        "--new",
-        "-n",
-        metavar="GAME",
-        help="Create a new match for GAME and jump into its waiting room.",
-    ),
-    join: str | None = typer.Option(
-        None,
-        "--join",
-        "-j",
-        metavar="MATCH_ID",
-        help="Join (or rejoin) an existing match by id.",
-    ),
-) -> None:
-    """Tuimanji — pubnix-local turn-based multiplayer."""
-    if sum([resume, new is not None, join is not None]) > 1:
-        raise typer.BadParameter("--resume, --new, and --join are mutually exclusive")
-    if new is not None and new not in REGISTRY:
-        valid = ", ".join(sorted(REGISTRY))
-        raise typer.BadParameter(
-            f"unknown game '{new}'. Valid: {valid}", param_hint="--new"
-        )
-    TuimanjiApp(resume=resume, new_game_id=new, join_match_id=join).run()
+The store layer (:mod:`tuimanji.store`) is the only thing that touches the
+database, and :class:`models.MatchState` / :class:`models.Action` rows are
+append-only — turn N is an insert, never an update — which is what gives
+replay, spectators, and crash-resume for free.
+"""
+
+from .engine import (
+    Animation,
+    Game,
+    GameError,
+    IllegalAction,
+    MatchNotFound,
+    NotYourTurn,
+)
+from .games import REGISTRY, all_games, get
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "Animation",
+    "Game",
+    "GameError",
+    "IllegalAction",
+    "MatchNotFound",
+    "NotYourTurn",
+    "REGISTRY",
+    "__version__",
+    "all_games",
+    "get",
+    "main",
+]
 
 
 def main() -> None:
-    typer.run(_run)
+    """Console-script entry point — defers to :func:`tuimanji.cli.main`."""
+    from .cli import main as _main
+
+    _main()

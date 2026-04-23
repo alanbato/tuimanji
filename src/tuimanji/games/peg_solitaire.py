@@ -1,3 +1,16 @@
+"""Peg Solitaire — single-player, English cross board.
+
+Jump a peg over an adjacent peg into an empty hole; the jumped peg is
+removed. Win by leaving exactly one peg (ideally in the center).
+
+Action schema::
+
+    {"from": [row, col], "to": [row, col]}   # orthogonal two-step jump
+
+This is the minimal single-player template — useful starting point for
+new solitaire-shaped games.
+"""
+
 from typing import Any
 
 from rich.segment import Segment

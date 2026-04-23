@@ -1,3 +1,21 @@
+"""Crazy Eights — 2-to-4 players, shed your hand by matching suit or rank.
+
+Eights are wild: playing one lets the player nominate the next suit via
+``chosen_suit``. Drawing is implicit when the current player has no legal
+play — ``index`` = ``-1`` resolves to draw-from-deck.
+
+Action schema::
+
+    {"index": int}                          # play card at hand index
+    {"index": int, "chosen_suit": str}      # play an 8 and pick a suit
+    {"index": -1}                           # draw from the deck
+
+Randomness (initial shuffle, draw order) is computed inside
+``apply_action`` and baked into returned state, so the pure-function
+guarantee still holds — seed is stored in ``state`` for reproducible
+replays.
+"""
+
 from __future__ import annotations
 
 import random

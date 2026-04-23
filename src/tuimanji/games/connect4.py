@@ -1,3 +1,13 @@
+"""Connect 4 — 7×6 grid, drop a disc into a column, four in a row wins.
+
+Action schema::
+
+    {"col": int}   # 0..6
+
+State carries ``last_drop = [row, col]`` so :meth:`animation_for` can emit
+a fall animation without re-simulating the drop from the move log.
+"""
+
 from dataclasses import dataclass
 from typing import Any
 

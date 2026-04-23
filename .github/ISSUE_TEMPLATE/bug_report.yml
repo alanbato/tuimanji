@@ -1,0 +1,74 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! For security issues, please follow
+        [SECURITY.md](../../SECURITY.md) instead of filing a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the problem.
+      placeholder: When I try to join a match, the lobby crashes with...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal sequence that reproduces the issue.
+      placeholder: |
+        1. `uv run tuimanji new chess`
+        2. In a second terminal, `uv run tuimanji join <id>`
+        3. Press enter
+        4. See crash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Tuimanji version
+      description: Output of `tuimanji --version`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: Output of `python --version`.
+      placeholder: "3.13.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal emulator
+      placeholder: foot, kitty, WezTerm, iTerm2, Windows Terminal, ...
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Traceback / logs
+      description: Paste any error output. Textual logs live at `textual.log` when set via `TEXTUAL_LOG`.
+      render: text
+    validations:
+      required: false

@@ -1,3 +1,31 @@
+"""The persistence and concurrency boundary.
+
+This module owns every read and write against the SQLite database. Games
+are pure functions; all I/O funnels through the functions here.
+
+**Append-only invariant.** ``match_state`` and ``action`` rows are never
+updated — turn N is always an insert with ``turn = latest.turn + 1``. The
+only mutation on ``match`` itself is its ``status`` column progressing
+``waiting → active → finished``. This is what gives free replay (iterate
+``action`` rows in order), spectators (read ``match_state`` at any turn),
+and crash-resume (the last committed ``match_state`` is the truth).
+
+**Race handling in :func:`submit_action` works in three layers:**
+
+1. The app-level ``current == player`` check raises :class:`NotYourTurn`
+   when two clients read the same latest state and one submits first.
+2. :func:`tuimanji.db._make_engine` sets ``PRAGMA busy_timeout=5000`` and a
+   ``begin`` event listener issuing ``BEGIN IMMEDIATE``, so every
+   transaction takes the reserved lock up front and contenders wait
+   cleanly instead of hitting ``SQLITE_BUSY_SNAPSHOT`` on shared→reserved
+   upgrades.
+3. If two writers somehow both pass the ``current`` check (same-player
+   double-submit), the ``(match_id, turn)`` unique-constraint trips at
+   commit time, :class:`sqlalchemy.exc.IntegrityError` is caught, the
+   latest state is re-read, and :class:`NotYourTurn` is re-raised so the
+   UI's existing handler takes over instead of a raw SQL error.
+"""
+
 import time
 import uuid
 
@@ -15,6 +43,8 @@ def _now() -> int:
 
 
 def create_match(game: Game, creator: str) -> str:
+    """Create a new ``waiting`` match, seat ``creator`` in slot 0, and return
+    the generated match id."""
     match_id = uuid.uuid4().hex[:10]
     with Session(get_engine()) as s:
         s.add(
@@ -36,6 +66,12 @@ def create_match(game: Game, creator: str) -> str:
 
 
 def join_match(game: Game, match_id: str, player: str) -> None:
+    """Seat ``player`` in the next free slot of ``match_id``.
+
+    No-ops if the player is already seated. Raises :class:`MatchNotFound`
+    if the id is unknown, or :class:`ValueError` if the match is not in
+    ``waiting`` status or is already full.
+    """
     with Session(get_engine()) as s:
         match = s.get(Match, match_id)
         if match is None:
@@ -59,12 +95,16 @@ def join_match(game: Game, match_id: str, player: str) -> None:
 
 
 class MatchNotReady(Exception):
-    pass
+    """Raised by :func:`start_match` when fewer than ``min_players`` are seated."""
 
 
 def start_match(game: Game, match_id: str, player: str) -> None:
-    """Transition a waiting match to active. Only the creator may start, and
-    only once min_players seats are filled."""
+    """Transition a ``waiting`` match to ``active``.
+
+    Only the creator may start, and only once ``game.min_players`` seats
+    are filled. Writes the turn-0 :class:`models.MatchState` row using
+    :meth:`Game.initial_state`.
+    """
     with Session(get_engine()) as s:
         match = s.get(Match, match_id)
         if match is None:
@@ -101,11 +141,17 @@ def start_match(game: Game, match_id: str, player: str) -> None:
 
 
 def get_match(match_id: str) -> Match | None:
+    """Return the :class:`Match` row, or ``None`` if the id is unknown."""
     with Session(get_engine()) as s:
         return s.get(Match, match_id)
 
 
 def latest_state(match_id: str) -> MatchState | None:
+    """Return the most recent :class:`MatchState` for ``match_id``.
+
+    Returns ``None`` before :func:`start_match` has been called — waiting
+    matches have seats but no turn-0 row yet.
+    """
     with Session(get_engine()) as s:
         stmt = (
             select(MatchState)
@@ -117,6 +163,7 @@ def latest_state(match_id: str) -> MatchState | None:
 
 
 def list_matches(game_id: str, status: str | None = None) -> list[Match]:
+    """Return matches for ``game_id``, newest first, optionally filtered by status."""
     with Session(get_engine()) as s:
         stmt = (
             select(Match)
@@ -191,6 +238,7 @@ def find_match_game(match_id: str) -> str | None:
 
 
 def match_players(match_id: str) -> list[str]:
+    """Return player ids seated in ``match_id``, ordered by seat index."""
     with Session(get_engine()) as s:
         stmt = (
             select(MatchPlayer)
@@ -201,6 +249,22 @@ def match_players(match_id: str) -> list[str]:
 
 
 def submit_action(match_id: str, player: str, action: dict, game: Game) -> MatchState:
+    """Apply ``action`` to the latest state and append the resulting turn.
+
+    Reads the latest :class:`MatchState`, raises :class:`NotYourTurn` if
+    ``player`` isn't the expected mover, delegates to
+    :meth:`Game.apply_action` for the pure state transition, then inserts
+    both a new :class:`Action` row and a new :class:`MatchState` row at
+    ``turn = latest.turn + 1``. Flips ``match.status`` to ``finished``
+    when :meth:`Game.is_terminal` returns ``True``.
+
+    Returns the newly-inserted :class:`MatchState`.
+
+    Raises:
+        MatchNotFound: No turn-0 row exists (match hasn't started).
+        NotYourTurn: Stale read, or lost the (match_id, turn) race.
+        IllegalAction: Propagated from :meth:`Game.apply_action`.
+    """
     with Session(get_engine()) as s:
         latest = s.scalars(
             select(MatchState)
