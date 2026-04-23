@@ -1,6 +1,6 @@
 [project]
 name = "tuimanji"
-version = "0.1.1"
+version = "0.1.2"
 description = "Pubnix-local turn-based multiplayer TUI for tic-tac-toe, chess, checkers, Reversi, Battleship, Connect 4, Crazy Eights, Royal Game of Ur, and peg solitaire."
 readme = "README.md"
 authors = [
@@ -60,7 +60,7 @@ module-name = "tuimanji"
 
 
 [tool.bumpversion]
-current_version = "0.1.1"
+current_version = "0.1.2"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 search = "{current_version}"
