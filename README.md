@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/tuimanji.svg)](https://pypi.org/project/tuimanji/)
 [![Python](https://img.shields.io/pypi/pyversions/tuimanji.svg)](https://pypi.org/project/tuimanji/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 [![CI](https://github.com/alanbato/tuimanji/actions/workflows/ci.yml/badge.svg)](https://github.com/alanbato/tuimanji/actions/workflows/ci.yml)
 
 > A **pubnix-local turn-based multiplayer TUI.** No server. No accounts. Just
@@ -133,8 +133,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide.
 
 ## License
 
-AGPL-3.0-or-later. See [LICENSE](LICENSE).
+LGPL-3.0-or-later. See [COPYING.LESSER](COPYING.LESSER) (which extends the
+GPLv3 in [COPYING](COPYING)).
 
-Modifications served over a network must be offered in source form — the
-AGPL's network clause applies. Tuimanji doesn't currently run as a network
-service, but derivative works that do should keep this in mind.
+Modifications to Tuimanji itself must be released under the LGPL, but larger
+works that merely use the library (e.g. a game module wired into the
+`REGISTRY`) are not required to adopt the same license.
