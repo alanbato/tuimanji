@@ -20,6 +20,33 @@ DEFAULT_DB_DIR = Path("/var/games/tuimanji")
 _engine: Engine | None = None
 
 
+def is_shared_dir(path: Path) -> bool:
+    """True if `path` is set up for multi-user (pubnix) sharing — sticky bit
+    plus world-writable, like ``/tmp``. The admin opts in by ``chmod 1777``-ing
+    the data dir; the code then propagates ``1777``/``0o666`` to subdirs and
+    files it creates inside, so users on a shared host don't trip on each
+    other's umask. A non-shared dir (e.g. a personal ``~/.local/share``)
+    stays untouched."""
+    try:
+        mode = path.stat().st_mode
+    except OSError:
+        return False
+    return bool(mode & 0o1000) and bool(mode & 0o002)
+
+
+def propagate_shared_perms(child: Path, parent: Path) -> None:
+    """If `parent` is a shared dir, chmod `child` to match (``1777`` for
+    dirs, ``0o666`` for files). Best-effort: silently skips on EPERM, since
+    files we don't own were placed there by someone else who knows better."""
+    if not is_shared_dir(parent):
+        return
+    try:
+        mode = 0o1777 if child.is_dir() else 0o666
+        os.chmod(child, mode)
+    except OSError:
+        pass
+
+
 def db_dir() -> Path:
     """Return the directory holding ``tuimanji.db``, creating it if missing."""
     raw = os.environ.get("TUIMANJI_DB")
@@ -33,6 +60,22 @@ def db_path() -> Path:
     return db_dir() / "tuimanji.db"
 
 
+def _share_db_files(parent: Path) -> None:
+    """If `parent` is shared, chmod tuimanji.db and any WAL/shm sidecars to
+    ``0o666`` so other users on the box can write. Sidecars are created
+    lazily by SQLite, so this gets called both at engine init and on every
+    new connection."""
+    if not is_shared_dir(parent):
+        return
+    for name in ("tuimanji.db", "tuimanji.db-wal", "tuimanji.db-shm"):
+        p = parent / name
+        if p.exists():
+            try:
+                os.chmod(p, 0o666)
+            except OSError:
+                pass
+
+
 def _make_engine() -> Engine:
     """Build a fresh engine, bypassing the module singleton. Used by tests
     that need two independent engines pointing at the same file to simulate
@@ -42,6 +85,8 @@ def _make_engine() -> Engine:
         connect_args={"check_same_thread": False},
     )
 
+    parent = db_dir()
+
     @event.listens_for(engine, "connect")
     def _set_pragmas(dbapi_conn, _):
         cur = dbapi_conn.cursor()
@@ -50,6 +95,10 @@ def _make_engine() -> Engine:
         cur.execute("PRAGMA foreign_keys=ON")
         cur.execute("PRAGMA busy_timeout=5000")
         cur.close()
+        # WAL/shm sidecars are created lazily by SQLite on the first WAL
+        # write; on a shared host they need to be world-writable so other
+        # users can read/write them too.
+        _share_db_files(parent)
 
     @event.listens_for(engine, "begin")
     def _begin_immediate(conn):
@@ -60,6 +109,7 @@ def _make_engine() -> Engine:
         conn.exec_driver_sql("BEGIN IMMEDIATE")
 
     SQLModel.metadata.create_all(engine)
+    _share_db_files(parent)
     return engine
 
 

@@ -72,6 +72,36 @@ tuimanji --db ~/.local/share/tuimanji
 
 Everyone playing against each other has to point at the same directory.
 
+### Pubnix / shared host setup
+
+For multiple users to share `/var/games/tuimanji/`, the directory needs to
+be writable by all of them. The easiest way is to mark it sticky +
+world-writable, the same way `/tmp` is, **once at install time** (as root):
+
+```bash
+sudo install -d -m 1777 /var/games/tuimanji
+```
+
+When tuimanji sees the data dir set up that way, it propagates the same
+intent to everything it creates inside: `.sessions/` becomes `1777` so
+every user can `mkdir` their own subdir, and `tuimanji.db` plus its WAL
+sidecars get `0o666` so writes from any user succeed. If the data dir
+isn't sticky+world-writable, tuimanji leaves permissions alone — your
+personal `~/.local/share/tuimanji` stays private.
+
+If you'd rather scope sharing to a unix group:
+
+```bash
+sudo groupadd tuimanji
+sudo install -d -m 2775 -g tuimanji /var/games/tuimanji
+sudo usermod -aG tuimanji alice  # repeat per user
+```
+
+…and have each user run with a permissive umask (`umask 0002`) so files
+they create stay group-writable. The auto-propagation above only kicks in
+for the sticky+world-writable layout; for groups, you set the policy and
+tuimanji honors what it finds.
+
 ## Games
 
 | id               | players | name              |

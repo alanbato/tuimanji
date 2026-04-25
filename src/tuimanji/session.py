@@ -18,7 +18,7 @@ from pathlib import Path
 from sqlmodel import Session, col, select
 
 from . import store
-from .db import db_dir, get_engine
+from .db import db_dir, get_engine, propagate_shared_perms
 from .models import Match, MatchPlayer
 
 MAX_SLOTS = 16
@@ -27,7 +27,14 @@ _held_fd: int | None = None
 
 
 def _sessions_dir(user: str) -> Path:
-    d = db_dir() / ".sessions" / user
+    base = db_dir()
+    sessions = base / ".sessions"
+    sessions.mkdir(parents=True, exist_ok=True)
+    # On a pubnix-style shared box (data dir is sticky+world-writable), the
+    # .sessions root needs the same perms so other users can mkdir their own
+    # subdirs underneath. The per-user subdir below stays private.
+    propagate_shared_perms(sessions, base)
+    d = sessions / user
     d.mkdir(parents=True, exist_ok=True)
     return d
 
