@@ -146,11 +146,21 @@ class LobbyScreen(Screen):
             players_cell = Text(players_str, style="grey50" if dim else "white")
             self._matches_table.add_row(status_cell, seats_cell, id_cell, players_cell)
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        # Track arrow-key navigation, not just Enter — pressing `n` to create
+        # a new match should use whichever game the cursor is on, even if the
+        # user never hit Enter to "select" it.
         if event.list_view is self._games_list and event.list_view.index is not None:
             self.selected_game_id = self._game_ids[event.list_view.index]
             self._last_snapshot = ()  # force rebuild of match list
             self._refresh_matches()
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        # Enter on the games list jumps focus to the matches table so the
+        # user can pick one to join (or fall through to `n` for a new match)
+        # without reaching for arrow keys or the mouse.
+        if event.list_view is self._games_list and self._matches_table is not None:
+            self._matches_table.focus()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table is not self._matches_table:
