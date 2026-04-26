@@ -47,7 +47,12 @@ class LobbyScreen(Screen):
         self._games_list: ListView | None = None
         self._matches_table: DataTable[Text] | None = None
         self._match_ids: list[str] = []
-        self._last_snapshot: tuple[tuple[str, str, int, int, tuple[str, ...]], ...] = ()
+        # `None` is the force-rebuild sentinel; `()` would collide with a
+        # legitimate empty snapshot (a game with zero matches), making the
+        # equality short-circuit skip a real refresh and leave stale rows.
+        self._last_snapshot: (
+            tuple[tuple[str, str, int, int, tuple[str, ...]], ...] | None
+        ) = None
         self._last_games_counts: tuple[tuple[int, int], ...] = ()
 
     @property
@@ -152,7 +157,7 @@ class LobbyScreen(Screen):
         # user never hit Enter to "select" it.
         if event.list_view is self._games_list and event.list_view.index is not None:
             self.selected_game_id = self._game_ids[event.list_view.index]
-            self._last_snapshot = ()  # force rebuild of match list
+            self._last_snapshot = None  # force rebuild of match list
             self._refresh_matches()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
