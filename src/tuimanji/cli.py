@@ -166,6 +166,19 @@ def cmd_where() -> None:
     typer.echo(str(db_dir()))
 
 
+@app.command("doctor")
+def cmd_doctor() -> None:
+    """Diagnose pubnix-style permission issues in ``$TUIMANJI_DB``.
+
+    Reports ownership, mode, and writability of the data directory, the
+    SQLite database, the WAL/SHM sidecars, and the .sessions root. Useful
+    when a user hits ``attempt to write a readonly database``.
+    """
+    from .doctor import run_doctor
+
+    raise typer.Exit(code=run_doctor(typer.echo))
+
+
 def main() -> None:
     """Console-script entry point."""
     app()
