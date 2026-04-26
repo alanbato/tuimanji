@@ -15,6 +15,8 @@ append-only — turn N is an insert, never an update — which is what gives
 replay, spectators, and crash-resume for free.
 """
 
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
 from .engine import (
     Animation,
     Game,
@@ -25,7 +27,12 @@ from .engine import (
 )
 from .games import REGISTRY, all_games, get
 
-__version__ = "0.1.0"
+try:
+    # Single source of truth: pyproject.toml. bumpversion already updates
+    # that file, so the CLI's --version follows automatically.
+    __version__ = _pkg_version("tuimanji")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
 
 __all__ = [
     "Animation",
