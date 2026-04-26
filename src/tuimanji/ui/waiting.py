@@ -7,6 +7,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Static
 
 from .. import store
+from ..engine import MatchNotFound
 from ..games import get as get_game
 from ..store import MatchNotReady
 from .match import MatchScreen
@@ -19,6 +20,7 @@ class WaitingRoomScreen(Screen):
     BINDINGS = [
         Binding("escape", "back", "Lobby"),
         Binding("s", "start", "Start"),
+        Binding("c", "cancel", "Cancel"),
     ]
 
     CSS = """
@@ -111,6 +113,19 @@ class WaitingRoomScreen(Screen):
                 self._error.update(str(e))
             return
         self._refresh()
+
+    def action_cancel(self) -> None:
+        if not self.is_host:
+            if self._error:
+                self._error.update("only the host can cancel this match")
+            return
+        try:
+            store.cancel_match(self.match_id, self.me)
+        except (MatchNotFound, ValueError) as e:
+            if self._error:
+                self._error.update(str(e))
+            return
+        self.app.pop_screen()
 
     def action_back(self) -> None:
         self.app.pop_screen()

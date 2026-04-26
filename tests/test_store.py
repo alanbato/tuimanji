@@ -145,6 +145,29 @@ def test_find_match_game(engine, game):
     assert store.find_match_game("nope") is None
 
 
+def test_cancel_match_removes_waiting_match(engine, game):
+    match_id = store.create_match(game, "alice")
+    store.join_match(game, match_id, "bob")
+    store.cancel_match(match_id, "alice")
+    assert store.get_match(match_id) is None
+    assert store.match_players(match_id) == []
+
+
+def test_cancel_match_only_creator(engine, game):
+    match_id = store.create_match(game, "alice")
+    store.join_match(game, match_id, "bob")
+    with pytest.raises(ValueError, match="only the match creator"):
+        store.cancel_match(match_id, "bob")
+    assert store.get_match(match_id) is not None
+
+
+def test_cancel_match_rejects_active(engine, game):
+    match_id = _seat_and_start(game, creator="alice", opponent="bob")
+    with pytest.raises(ValueError, match="can only cancel waiting matches"):
+        store.cancel_match(match_id, "alice")
+    assert store.get_match(match_id) is not None
+
+
 def test_best_resumable_picks_active_over_waiting(engine, game):
     waiting_id = store.create_match(game, "alice")
     active_id = _seat_and_start(game, creator="alice", opponent="bob")

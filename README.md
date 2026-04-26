@@ -124,6 +124,7 @@ tuimanji honors what it finds.
 | `enter` `space` | commit cursor action                                |
 | `r`             | rotate ship (Battleship placement phase)            |
 | `tab`           | cycle stage / suit / piece (multi-phase games)      |
+| `c`             | cancel match (waiting room, host only)              |
 | `q`             | quit to lobby                                       |
 
 Per-game quirks are surfaced in the status strip at the bottom of each match.

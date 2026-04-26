@@ -29,7 +29,7 @@ and crash-resume (the last committed ``match_state`` is the truth).
 import time
 import uuid
 
-from sqlalchemy import case, func
+from sqlalchemy import case, delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
@@ -137,6 +137,34 @@ def start_match(game: Game, match_id: str, player: str) -> None:
                 created_at=_now(),
             )
         )
+        s.commit()
+
+
+def cancel_match(match_id: str, player: str) -> None:
+    """Delete a ``waiting`` match and its seats. Only the creator may cancel.
+
+    Removal — rather than a status flip — is consistent with the
+    append-only design: replay/spectator/crash-resume only matter for
+    matches that produced :class:`MatchState` rows, and waiting matches
+    have none. Other players sitting in the waiting room poll the match
+    and pop back to the lobby once :func:`get_match` returns ``None``.
+
+    Raises:
+        MatchNotFound: id is unknown.
+        ValueError: status isn't ``waiting``, or ``player`` isn't the creator.
+    """
+    with Session(get_engine()) as s:
+        match = s.get(Match, match_id)
+        if match is None:
+            raise MatchNotFound(match_id)
+        if match.status != "waiting":
+            raise ValueError(
+                f"can only cancel waiting matches; status is {match.status!r}"
+            )
+        if match.created_by != player:
+            raise ValueError("only the match creator can cancel")
+        s.execute(delete(MatchPlayer).where(col(MatchPlayer.match_id) == match_id))
+        s.delete(match)
         s.commit()
 
 
