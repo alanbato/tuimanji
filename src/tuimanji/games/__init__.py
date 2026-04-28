@@ -18,6 +18,7 @@ from .checkers import Checkers
 from .chess import Chess
 from .connect4 import Connect4
 from .crazy_eights import CrazyEights
+from .mastermind import Mastermind
 from .peg_solitaire import PegSolitaire
 from .reversi import Reversi
 from .royal_ur import RoyalUr
@@ -33,6 +34,7 @@ REGISTRY: dict[str, Game] = {
     PegSolitaire.id: PegSolitaire(),
     CrazyEights.id: CrazyEights(),
     RoyalUr.id: RoyalUr(),
+    Mastermind.id: Mastermind(),
 }
 
 

@@ -1,7 +1,7 @@
 [project]
 name = "tuimanji"
 version = "0.1.8"
-description = "Pubnix-local turn-based multiplayer TUI for tic-tac-toe, chess, checkers, Reversi, Battleship, Connect 4, Crazy Eights, Royal Game of Ur, and peg solitaire."
+description = "Pubnix-local turn-based multiplayer TUI for tic-tac-toe, chess, checkers, Reversi, Battleship, Connect 4, Crazy Eights, Royal Game of Ur, peg solitaire, and Mastermind."
 readme = "README.md"
 authors = [
     { name = "Alan Velasco", email = "alanvelasco.a@gmail.com" }

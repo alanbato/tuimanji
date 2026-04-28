@@ -8,9 +8,9 @@
 > A **pubnix-local turn-based multiplayer TUI.** No server. No accounts. Just
 > log in to the same box as your friend and play something.
 
-Tuimanji bundles nine turn-based games — Tic-Tac-Toe, Connect 4, Reversi,
-Chess, Checkers, Battleship, Crazy Eights, Peg Solitaire, and the Royal Game
-of Ur — behind a single Textual terminal UI. Matches live in a shared SQLite
+Tuimanji bundles ten turn-based games — Tic-Tac-Toe, Connect 4, Reversi,
+Chess, Checkers, Battleship, Crazy Eights, Peg Solitaire, the Royal Game
+of Ur, and Mastermind — behind a single Textual terminal UI. Matches live in a shared SQLite
 database; clients coordinate via file locks and append-only writes. It's
 designed for [pubnix](https://tildeverse.org/) boxes, shared servers, and
 old-school SSH shenanigans.
@@ -115,6 +115,7 @@ tuimanji honors what it finds.
 | `peg-solitaire`  | 1       | Peg Solitaire     |
 | `crazy-eights`   | 2–4     | Crazy Eights      |
 | `royal-ur`       | 2       | Royal Game of Ur  |
+| `mastermind`     | 2       | Mastermind        |
 
 ## Controls
 
